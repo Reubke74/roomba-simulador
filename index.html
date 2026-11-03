@@ -4,48 +4,71 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Simulador Aspiradora Robot</title>
-<meta name="description" content="Simulación de una aspiradora robot sin inteligencia artificial en dos habitaciones: trayectorias, consumo, eficiencia y redundancia.">
-<link rel="stylesheet" href="style.css">
+<meta name="description" content="Simulación de una aspiradora robot sin IA y con IA en dos habitaciones: trayectorias, superficie barrida, consumo, costo, eficiencia y redundancia.">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 <header>
   <h1>Aspiradora robot: sin IA y con IA <span>· simulación en dos habitaciones</span></h1>
-  <p>Tres estrategias con reglas fijas y sensores de choque, y un robot con IA que mapea y planifica. Compara trayectoria, gasto de batería, costo, eficiencia y limpieza repetida.</p>
+  <p>Tres estrategias con reglas fijas y sensores de choque, y un robot con IA que mapea y planifica. Compara trayectoria, superficie barrida, consumo, costo y limpieza repetida.</p>
+  <p class="guide"><b>Cómo usarla:</b> 1) pulsa <b>Ejecutar hasta terminar</b> para ver el resultado final de los cuatro robots · 2) activa <b>Muebles movidos</b> para cambiar la casa · 3) alterna entre <b>Los cuatro</b> y <b>Un robot</b> para ver cada mapa.</p>
 </header>
 
 <main>
   <section class="controls">
-    <div class="tabs" id="tabs" role="tablist"></div>
-    <div class="buttons">
-      <button id="play" class="primary">Pausa</button>
-      <button id="ff">Ejecutar hasta terminar</button>
-      <button id="reset">Reiniciar</button>
-      <button id="reseed">Otra semilla</button>
-      <label>Velocidad
-        <select id="speed">
-          <option value="2">Lenta</option>
-          <option value="10">Normal</option>
-          <option value="50" selected>Rápida</option>
-          <option value="250">Muy rápida</option>
-          <option value="1000">Turbo</option>
-        </select>
-      </label>
-      <label>Tarifa CFE
-        <select id="tarifa">
-          <option value="basico">Básico $1.125/kWh</option>
-          <option value="intermedio" selected>Intermedio $1.369/kWh (uso medio)</option>
-          <option value="excedente">Excedente $4.004/kWh</option>
-        </select>
-      </label>
-      <label><input type="checkbox" id="iva" checked> IVA 16 %</label>
-      <label><input type="checkbox" id="moved"> Muebles movidos (el plano guardado queda desactualizado)</label>
+    <div class="groups">
+      <div class="group">
+        <h3>Simulación</h3>
+        <div class="row">
+          <button id="play" class="primary">Pausa</button>
+          <button id="ff">Ejecutar hasta terminar</button>
+          <button id="reset">Reiniciar</button>
+          <button id="reseed">Otra semilla</button>
+          <label>Velocidad
+            <select id="speed">
+              <option value="2">Lenta</option>
+              <option value="10">Normal</option>
+              <option value="50" selected>Rápida</option>
+              <option value="250">Muy rápida</option>
+              <option value="1000">Turbo</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div class="group">
+        <h3>Escenario y vista</h3>
+        <div class="row">
+          <label class="chk"><input type="checkbox" id="moved"> Muebles movidos <small>(el plano guardado queda desactualizado)</small></label>
+          <div class="seg" id="view" role="group" aria-label="Vista del mapa">
+            <button data-v="four" aria-pressed="true">Los cuatro</button>
+            <button data-v="one" aria-pressed="false">Un robot</button>
+          </div>
+        </div>
+      </div>
+      <details class="group">
+        <summary>Costo de la energía (CFE)</summary>
+        <div class="row">
+          <label>Tarifa
+            <select id="tarifa">
+              <option value="basico">Básico $1.125/kWh</option>
+              <option value="intermedio" selected>Intermedio $1.369/kWh (uso medio)</option>
+              <option value="excedente">Excedente $4.004/kWh</option>
+            </select>
+          </label>
+          <label class="chk"><input type="checkbox" id="iva" checked> IVA 16 %</label>
+        </div>
+      </details>
     </div>
+    <div class="tabs" id="tabs" role="tablist" aria-label="Robot seleccionado"></div>
     <p id="desc" class="desc"></p>
+    <div class="progress" id="prog" hidden><div id="progbar"></div><span id="progtxt"></span></div>
   </section>
+
+  <section class="summary" id="summary" hidden></section>
 
   <section class="stage">
     <div class="mapwrap">
-      <canvas id="map"></canvas>
+      <div id="maps" class="maps four"></div>
       <div class="maptools">
         <label><input type="checkbox" id="lyTrail" checked> Trayectoria</label>
         <label><input type="checkbox" id="lyHeat" checked> Mapa de repeticiones</label>
@@ -61,9 +84,9 @@
     </div>
 
     <aside class="metrics">
-      <div class="status" id="status"></div>
+      <div class="status" id="status" aria-live="polite"></div>
       <div class="battery"><div id="batBar"></div><span id="batTxt"></span></div>
-      <div class="grid" id="cards"></div>
+      <div id="cards"></div>
       <h3>Cuántas veces se limpió cada zona</h3>
       <div class="hist" id="hist"></div>
     </aside>
@@ -76,7 +99,7 @@
     </div>
     <div class="panel">
       <h2>Cobertura según energía gastada</h2>
-      <canvas id="chart" width="640" height="300"></canvas>
+      <canvas id="chart" width="640" height="300" role="img" aria-label="Cobertura contra energía gastada de cada robot"></canvas>
       <p class="note">Una curva que sube rápido y llega arriba con poca energía es una limpieza eficiente.</p>
     </div>
   </section>
@@ -84,7 +107,9 @@
   <section class="panel notes">
     <h2>Cómo leer los números</h2>
     <ul>
-      <li><b>Cobertura</b>: porcentaje del suelo alcanzable que ya pasó bajo la boquilla (se descartan rincones donde el robot circular no cabe). Las estrategias aleatorias se detienen al 95 %.</li>
+      <li><b>Superficie a barrer</b>: suelo libre que el robot puede alcanzar. De la superficie libre de la casa se descartan los huecos donde un robot circular no cabe (rincones y rendijas junto a muebles).</li>
+      <li><b>Barrida efectivamente</b>: metros cuadrados distintos que ya pasaron bajo la boquilla. <b>Pendiente (de menos)</b> = a barrer − barrida. <b>Re-barrida (de más)</b> = pasadas repetidas sobre algo que ya estaba limpio. <b>Total pasado</b> = barrida + re-barrida; dividido entre la superficie a barrer da el <b>factor de barrido</b> (1.00× sería perfecto).</li>
+      <li><b>Cobertura</b>: barrida ÷ superficie a barrer. Las estrategias aleatorias se detienen al 95 %.</li>
       <li><b>Redundancia</b>: de todas las pasadas sobre el suelo, qué fracción fue sobre algo ya limpio. 0 % sería perfecto.</li>
       <li><b>Eficiencia de trayectoria</b>: recorrido mínimo teórico (área ÷ ancho de 30 cm) entre el recorrido real.</li>
       <li><b>Eficiencia energética</b>: energía mínima teórica para el área limpiada entre la energía real.</li>
@@ -99,8 +124,8 @@
   </section>
 </main>
 
-<script src="sim.js"></script>
-<script src="ai.js"></script>
-<script src="app.js"></script>
+<script src="sim.js?v=3"></script>
+<script src="ai.js?v=3"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>

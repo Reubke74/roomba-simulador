@@ -105,8 +105,8 @@
         if (i >= 0 && j >= 0 && i < W && j < H && free[j * W + i]) cleanable[j * W + i] = 1;
       }
     }
-    let nClean = 0; for (let c = 0; c < W * H; c++) nClean += cleanable[c];
-    const env = { free, valid, reach, cleanable, nClean, furniture: items, stale: false };
+    let nClean = 0, nFree = 0; for (let c = 0; c < W * H; c++) { nClean += cleanable[c]; nFree += free[c]; }
+    const env = { free, valid, reach, cleanable, nClean, nFree, furniture: items, stale: false };
     env.plan = buildPlan(env);
     return env;
   }
@@ -333,6 +333,8 @@
       return {
         time: this.stepN * DT, dist: distM, energy: this.energy, battery: Math.max(0, 1 - this.energy / BATTERY_WH),
         coverage: cov, area: areaM2,
+        areaTotal: this.env.nFree * CELL_M * CELL_M, areaReach: this.env.nClean * CELL_M * CELL_M,
+        pending: (this.env.nClean - this.cleaned) * CELL_M * CELL_M, gross: this.totalVisits * CELL_M * CELL_M,
         redundancy: this.totalVisits ? 1 - this.cleaned / this.totalVisits : 0,
         rePass: (this.totalVisits - this.cleaned) * CELL_M * CELL_M,
         pathEff: distM > 0 ? Math.min(1, idealPath / distM) : 0,
