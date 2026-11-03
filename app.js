@@ -5,11 +5,15 @@
   const COLORS = { random: '#4c9be8', roomba: '#f0a03c', planned: '#4cc38a' };
   const KEYS = Object.keys(ALGOS);
   const HEAT = [null, [47, 158, 122], [217, 164, 65], [232, 116, 59], [229, 72, 77]];
+  const PAD = { l: 40, t: 34, r: 40, b: 8 };     // margen del mapa para las cotas
+  // CFE Tarifa 1 doméstica, $/kWh sin IVA (junio 2026, UnoTV). Verificar vigencia en cfe.mx
+  const TARIFAS = { basico: 1.125, intermedio: 1.369, excedente: 4.004 };
+  const IVA = 1.16, EFF_CARGA = 0.85;            // IVA 16 %; la pared entrega más que la batería
 
   const env = buildEnv();
   const $ = id => document.getElementById(id);
   const map = $('map'), ctx = map.getContext('2d');
-  map.width = W * S; map.height = H * S;
+  map.width = W * S + PAD.l + PAD.r; map.height = H * S + PAD.t + PAD.b;
   const heat = document.createElement('canvas'); heat.width = W; heat.height = H;
   const hctx = heat.getContext('2d'); const himg = hctx.createImageData(W, H);
 
@@ -33,6 +37,30 @@
     FURNITURE.forEach(f => { if (f.w >= 6 && f.h >= 6) c.fillText(f.n, (f.x + f.w / 2) * S, (f.y + f.h / 2) * S); });
     c.fillStyle = '#7fb4ff'; c.fillRect((DOCK.x - 1.5) * S, (DOCK.y - 1.5) * S, 3 * S, 3 * S);
     c.fillStyle = '#06101c'; c.font = '700 10px system-ui,sans-serif'; c.fillText('base', DOCK.x * S, DOCK.y * S);
+    // cota de la puerta
+    c.strokeStyle = '#e6ebf4'; c.fillStyle = '#e6ebf4'; c.lineWidth = 1.2; c.font = '600 10px system-ui,sans-serif';
+    const dx = 63.5 * S;
+    c.beginPath(); c.moveTo(dx, 16 * S); c.lineTo(dx, 24 * S); c.moveTo(dx - 4, 16 * S); c.lineTo(dx + 4, 16 * S); c.moveTo(dx - 4, 24 * S); c.lineTo(dx + 4, 24 * S); c.stroke();
+    c.save(); c.translate(dx + 9, 20 * S); c.rotate(-Math.PI / 2); c.fillText('puerta 0.8 m', 0, 0); c.restore();
+  })();
+  // cotas de las habitaciones (fuera del plano)
+  const dims = document.createElement('canvas'); dims.width = map.width; dims.height = map.height;
+  (function () {
+    const c = dims.getContext('2d'), X = x => PAD.l + x * S, Y = y => PAD.t + y * S;
+    c.fillStyle = '#0b0f16'; c.fillRect(0, 0, dims.width, dims.height);
+    c.strokeStyle = '#7f8da6'; c.lineWidth = 1; c.font = '600 12px system-ui,sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    const line = (x1, y1, x2, y2) => { c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke(); };
+    const label = (txt, x, y, rot) => {
+      c.save(); c.translate(x, y); if (rot) c.rotate(-Math.PI / 2);
+      const w = c.measureText(txt).width + 10; c.fillStyle = '#0b0f16'; c.fillRect(-w / 2, -8, w, 16);
+      c.fillStyle = '#c3cce0'; c.fillText(txt, 0, 0); c.restore();
+    };
+    const hdim = (xa, xb, y, txt) => { line(X(xa), y, X(xb), y); line(X(xa), y - 5, X(xa), y + 5); line(X(xb), y - 5, X(xb), y + 5); label(txt, (X(xa) + X(xb)) / 2, y, false); };
+    const vdim = (ya, yb, x, txt) => { line(x, Y(ya), x, Y(yb)); line(x - 5, Y(ya), x + 5, Y(ya)); line(x - 5, Y(yb), x + 5, Y(yb)); label(txt, x, (Y(ya) + Y(yb)) / 2, true); };
+    hdim(0, 60, 16, 'Sala · 6.0 m');
+    hdim(62, 102, 16, 'Dormitorio · 4.0 m');
+    vdim(0, 40, 20, 'Sala · 4.0 m');
+    vdim(0, 40, PAD.l + W * S + 20, 'Dormitorio · 4.0 m');
   })();
 
   let seed = 7, sims, trails, drawn, sel = 'roomba', playing = true, ff = false;
@@ -68,6 +96,7 @@
   /* ---------- dibujo ---------- */
   function draw() {
     const sim = sims[sel];
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(dims, 0, 0); ctx.translate(PAD.l, PAD.t);
     ctx.drawImage(stat, 0, 0);
     if ($('lyHeat').checked) {
       const d = himg.data;
@@ -104,11 +133,15 @@
   /* ---------- métricas ---------- */
   const fmtT = s => { s = Math.round(s); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
   const pct = x => (x * 100).toFixed(1);
+  // energía de batería (Wh) -> pesos MXN en el recibo
+  const costo = wh => wh / EFF_CARGA / 1000 * TARIFAS[$('tarifa').value] * ($('iva').checked ? IVA : 1);
   function cards(m) {
     const items = [
       ['Tiempo', fmtT(m.time), 'min:s'],
       ['Distancia', m.dist.toFixed(0), 'm'],
       ['Energía gastada', m.energy.toFixed(1), 'Wh'],
+      ['Costo de esta limpieza', '$' + costo(m.energy).toFixed(3), 'MXN'],
+      ['Costo al mes (1 diaria)', '$' + (costo(m.energy) * 30).toFixed(2), 'MXN'],
       ['Cobertura', pct(m.coverage), '%'],
       ['Redundancia', pct(m.redundancy), '%'],
       ['Re-limpiado', m.rePass.toFixed(1), 'm²'],
@@ -137,12 +170,14 @@
       ['Tiempo a 95 %', r => r.m.at95 ? fmtT(r.m.at95.t) : '—', bT, 'at95t'],
       ['Distancia', r => r.m.dist.toFixed(0) + ' m'],
       ['Energía', r => r.m.energy.toFixed(1) + ' Wh'],
+      ['Costo/limpieza', r => '$' + costo(r.m.energy).toFixed(3)],
+      ['Costo/año', r => '$' + (costo(r.m.energy) * 365).toFixed(0)],
       ['Redundancia', r => pct(r.m.redundancy) + '%'],
       ['Efic. energética', r => pct(r.m.energyEff) + '%'],
     ];
     const cells = {
       Redundancia: best(r => r.m.redundancy, true), 'Efic. energética': best(r => r.m.energyEff, false),
-      Energía: best(r => r.m.energy, true), Distancia: best(r => r.m.dist, true), 'Tiempo a 95 %': bT,
+      Energía: best(r => r.m.energy, true), 'Costo/limpieza': best(r => r.m.energy, true), 'Costo/año': best(r => r.m.energy, true), Distancia: best(r => r.m.dist, true), 'Tiempo a 95 %': bT,
     };
     $('cmp').innerHTML = '<thead><tr><th>Estrategia</th>' + defs.map(d => '<th>' + d[0] + '</th>').join('') + '<th>Estado</th></tr></thead><tbody>' +
       rows.map(r => '<tr class="' + (r.k === sel ? 'sel' : '') + '"><td><span class="dot" style="background:' + COLORS[r.k] + '"></span>' + ALGOS[r.k].name + '</td>' +
@@ -197,7 +232,7 @@
     }
     requestAnimationFrame(loop);
   }
-  ['lyTrail', 'lyHeat'].forEach(id => $(id).onchange = () => update());
+  ['lyTrail', 'lyHeat', 'tarifa', 'iva'].forEach(id => $(id).onchange = () => update());
 
   make(); refreshTabs(); update(true); requestAnimationFrame(loop);
   window.__roomba = { get sims() { return sims; }, env };

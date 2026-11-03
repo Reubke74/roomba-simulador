@@ -30,6 +30,14 @@
           <option value="1000">Turbo</option>
         </select>
       </label>
+      <label>Tarifa CFE
+        <select id="tarifa">
+          <option value="basico">Básico $1.125/kWh</option>
+          <option value="intermedio" selected>Intermedio $1.369/kWh (uso medio)</option>
+          <option value="excedente">Excedente $4.004/kWh</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="iva" checked> IVA 16 %</label>
     </div>
     <p id="desc" class="desc"></p>
   </section>
@@ -80,6 +88,7 @@
       <li><b>Eficiencia energética</b>: energía mínima teórica para el área limpiada entre la energía real.</li>
       <li><b>Energía sin área nueva</b>: parte de la batería gastada en pasos que no limpiaron nada nuevo (repetir, girar, cruzar zonas ya limpias).</li>
       <li><b>Modelo</b>: casa de 6 × 4 m y 4 × 4 m con puerta de 80 cm; robot de ~30 cm a 0,3 m/s; batería de 30 Wh; consumo 18 W en marcha (3 base + 10 cepillo/succión + 5 tracción) y 16 W al girar en sitio. Los valores son plausibles pero ilustrativos, no de un modelo comercial concreto.</li>
+      <li><b>Costo en pesos</b>: energía de la batería ÷ 0.85 (pérdidas del cargador) × precio por kWh de la Tarifa 1 doméstica de CFE × IVA 16 %. Precios por kWh sin IVA usados: básico 1.125 (0–75 kWh), intermedio 1.369 (76–140 kWh) y excedente 4.004 (más de 140 kWh), publicados para junio de 2026. Por defecto se aplica el bloque intermedio, como precio de cada kWh adicional en un hogar de consumo medio. CFE actualiza las cuotas cada mes: confírmalas en cfe.mx y cámbialas en la lista. «Costo al mes» supone una limpieza diaria.</li>
       <li><b>Sin IA</b>: ningún método aprende, entrena ni usa redes neuronales. Son máquinas de estados con azar, y el planificado usa un plan fijo con BFS clásico.</li>
     </ul>
   </section>
