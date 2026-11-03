@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulador Aspiradora Robot</title>
+<meta name="description" content="Simulación de una aspiradora robot sin inteligencia artificial en dos habitaciones: trayectorias, consumo, eficiencia y redundancia.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Aspiradora robot sin IA <span>· simulación en dos habitaciones</span></h1>
+  <p>Tres estrategias basadas solo en reglas fijas y sensores de choque. Compara trayectoria, gasto de batería, eficiencia y limpieza repetida.</p>
+</header>
+
+<main>
+  <section class="controls">
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <div class="buttons">
+      <button id="play" class="primary">Pausa</button>
+      <button id="ff">Ejecutar hasta terminar</button>
+      <button id="reset">Reiniciar</button>
+      <button id="reseed">Otra semilla</button>
+      <label>Velocidad
+        <select id="speed">
+          <option value="2">Lenta</option>
+          <option value="10">Normal</option>
+          <option value="50" selected>Rápida</option>
+          <option value="250">Muy rápida</option>
+          <option value="1000">Turbo</option>
+        </select>
+      </label>
+    </div>
+    <p id="desc" class="desc"></p>
+  </section>
+
+  <section class="stage">
+    <div class="mapwrap">
+      <canvas id="map"></canvas>
+      <div class="maptools">
+        <label><input type="checkbox" id="lyTrail" checked> Trayectoria</label>
+        <label><input type="checkbox" id="lyHeat" checked> Mapa de repeticiones</label>
+        <span class="legend">
+          <i style="background:#2f9e7a"></i>1 vez
+          <i style="background:#d9a441"></i>2
+          <i style="background:#e8743b"></i>3–4
+          <i style="background:#e5484d"></i>5 o más
+          <i class="un"></i>sin limpiar
+        </span>
+      </div>
+    </div>
+
+    <aside class="metrics">
+      <div class="status" id="status"></div>
+      <div class="battery"><div id="batBar"></div><span id="batTxt"></span></div>
+      <div class="grid" id="cards"></div>
+      <h3>Cuántas veces se limpió cada zona</h3>
+      <div class="hist" id="hist"></div>
+    </aside>
+  </section>
+
+  <section class="compare">
+    <div class="panel">
+      <h2>Comparación de estrategias</h2>
+      <div class="tablewrap"><table id="cmp"></table></div>
+    </div>
+    <div class="panel">
+      <h2>Cobertura según energía gastada</h2>
+      <canvas id="chart" width="640" height="300"></canvas>
+      <p class="note">Una curva que sube rápido y llega arriba con poca energía es una limpieza eficiente.</p>
+    </div>
+  </section>
+
+  <section class="panel notes">
+    <h2>Cómo leer los números</h2>
+    <ul>
+      <li><b>Cobertura</b>: porcentaje del suelo alcanzable que ya pasó bajo la boquilla (se descartan rincones donde el robot circular no cabe). Las estrategias aleatorias se detienen al 95 %.</li>
+      <li><b>Redundancia</b>: de todas las pasadas sobre el suelo, qué fracción fue sobre algo ya limpio. 0 % sería perfecto.</li>
+      <li><b>Eficiencia de trayectoria</b>: recorrido mínimo teórico (área ÷ ancho de 30 cm) entre el recorrido real.</li>
+      <li><b>Eficiencia energética</b>: energía mínima teórica para el área limpiada entre la energía real.</li>
+      <li><b>Energía sin área nueva</b>: parte de la batería gastada en pasos que no limpiaron nada nuevo (repetir, girar, cruzar zonas ya limpias).</li>
+      <li><b>Modelo</b>: casa de 6 × 4 m y 4 × 4 m con puerta de 80 cm; robot de ~30 cm a 0,3 m/s; batería de 30 Wh; consumo 18 W en marcha (3 base + 10 cepillo/succión + 5 tracción) y 16 W al girar en sitio. Los valores son plausibles pero ilustrativos, no de un modelo comercial concreto.</li>
+      <li><b>Sin IA</b>: ningún método aprende, entrena ni usa redes neuronales. Son máquinas de estados con azar, y el planificado usa un plan fijo con BFS clásico.</li>
+    </ul>
+  </section>
+</main>
+
+<script src="sim.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

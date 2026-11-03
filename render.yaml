@@ -1,0 +1,5 @@
+services:
+  - type: web
+    name: roomba-simulador
+    runtime: static
+    staticPublishPath: .
