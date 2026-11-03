@@ -7,8 +7,8 @@
   const KEYS = Object.keys(ALGOS);
   const HEAT = [null, [47, 158, 122], [217, 164, 65], [232, 116, 59], [229, 72, 77]];
   const PAD = { l: 52, t: 46, r: 52, b: 12 };    // margen del mapa para las cotas
-  // CFE Tarifa 1 doméstica, $/kWh sin IVA (junio 2026, UnoTV). Verificar vigencia en cfe.mx
-  const TARIFAS = { basico: 1.125, intermedio: 1.369, excedente: 4.004 };
+  // CFE Tarifa 1 doméstica, $/kWh sin IVA, noviembre 2026 (app.cfe.mx, página oficial de la Tarifa 1). CFE las cambia cada mes.
+  const TARIFAS = { basico: 1.144, intermedio: 1.389, excedente: 4.067 };
   const IVA = 1.16, EFF_CARGA = 0.85;            // IVA 16 %; la pared entrega más que la batería
 
   let env = buildEnv(false);

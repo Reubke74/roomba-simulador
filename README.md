@@ -16,7 +16,7 @@ Muestra trayectorias, superficie a barrer / barrida / pendiente / re-barrida, co
     python -m http.server 8765
 
 ## Supuestos que conviene verificar
-- Precios de CFE (`TARIFAS` en `app.js`): tomados de prensa para junio de 2026; confirmar en cfe.mx.
+- Precios de CFE (`TARIFAS` en `app.js`): tomados de la página oficial de la Tarifa 1 (app.cfe.mx) para noviembre de 2026. CFE los cambia cada mes; hay que actualizarlos.
 - Consumo (18 W en marcha, +3 W del sensor de la IA), batería de 30 Wh y pérdidas del cargador (0.85): valores ilustrativos.
 
 ## Publicar

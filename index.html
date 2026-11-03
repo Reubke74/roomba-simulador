@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Simulador Aspiradora Robot</title>
 <meta name="description" content="Simulación de una aspiradora robot sin IA y con IA en dos habitaciones: trayectorias, superficie barrida, consumo, costo, eficiencia y redundancia.">
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 <header>
@@ -50,9 +50,9 @@
         <div class="row">
           <label>Tarifa
             <select id="tarifa">
-              <option value="basico">Básico $1.125/kWh</option>
-              <option value="intermedio" selected>Intermedio $1.369/kWh (uso medio)</option>
-              <option value="excedente">Excedente $4.004/kWh</option>
+              <option value="basico">Básico $1.144/kWh</option>
+              <option value="intermedio" selected>Intermedio $1.389/kWh (uso medio)</option>
+              <option value="excedente">Excedente $4.067/kWh</option>
             </select>
           </label>
           <label class="chk"><input type="checkbox" id="iva" checked> IVA 16 %</label>
@@ -116,16 +116,16 @@
       <li><b>Efectividad</b>: cobertura × eficiencia energética. Mide a la vez cuánto del objetivo se logró (eficacia) y qué tan bien se aprovechó la energía (eficiencia): 100 % sería limpiar todo sin desperdiciar nada.</li>
       <li><b>Energía sin área nueva</b>: parte de la batería gastada en pasos que no limpiaron nada nuevo (repetir, girar, cruzar zonas ya limpias).</li>
       <li><b>Modelo</b>: casa de 6 × 4 m y 4 × 4 m con puerta de 80 cm; robot de ~30 cm a 0,3 m/s; batería de 30 Wh; consumo 18 W en marcha (3 base + 10 cepillo/succión + 5 tracción) y 16 W al girar en sitio. Los valores son plausibles pero ilustrativos, no de un modelo comercial concreto.</li>
-      <li><b>Costo en pesos</b>: energía de la batería ÷ 0.85 (pérdidas del cargador) × precio por kWh de la Tarifa 1 doméstica de CFE × IVA 16 %. Precios por kWh sin IVA usados: básico 1.125 (0–75 kWh), intermedio 1.369 (76–140 kWh) y excedente 4.004 (más de 140 kWh), publicados para junio de 2026. Por defecto se aplica el bloque intermedio, como precio de cada kWh adicional en un hogar de consumo medio. CFE actualiza las cuotas cada mes: confírmalas en cfe.mx y cámbialas en la lista. «Costo al mes» supone una limpieza diaria.</li>
-      <li><b>Muebles movidos</b>: cambia la distribución real de la casa. El robot planificado sigue usando su plano viejo: si choca, anota el choque y salta al siguiente punto de su plan, sin replanificar. Los robots aleatorios y el robot con IA no dependen de un plano y se adaptan solos.</li>
+      <li><b>Costo en pesos</b>: energía de la batería ÷ 0.85 (pérdidas del cargador) × precio por kWh de la Tarifa 1 doméstica de CFE × IVA 16 %. Precios por kWh sin IVA, tomados de la página oficial de la Tarifa 1 de CFE (app.cfe.mx) para noviembre de 2026: básico 1.144 (primeros 75 kWh), intermedio 1.389 (siguientes 65 kWh) y excedente 4.067 (cada kWh adicional). Por defecto se aplica el bloque intermedio, como precio de cada kWh adicional en un hogar de consumo medio. CFE actualiza las cuotas cada mes y el IVA de 16 % es el que suele aparecer en el recibo: confírmalos en tu recibo y cambia el bloque en la lista. «Costo al mes» supone una limpieza diaria.</li>
+      <li><b>Muebles movidos</b>: cambia la distribución real de la casa. El robot planificado sigue usando su plano viejo: si choca, rodea el obstáculo pegado a la pared hasta que vuelve a tener paso hacia su siguiente punto y, si en 15 s no lo logra, salta al siguiente punto. No rehace el plan ni aprende dónde quedó cada mueble. Los robots aleatorios y el robot con IA no dependen de un plano y se adaptan solos.</li>
       <li><b>Sin IA</b>: los tres primeros no aprenden ni se adaptan. Son máquinas de estados con azar, y el planificado sigue un plan fijo calculado con el plano ya conocido (BFS clásico).</li>
       <li><b>Con IA</b>: el robot no conoce el plano. Un láser simulado (alcance 3 m, sin ruido) construye un mapa mientras limpia, y un planificador elige en cada momento la zona sucia más cercana, explorando cuando no queda nada a la vista. Gasta 3 W extra por sensor y procesador. Es IA de robótica clásica (percepción, mapa y planificación), no una red neuronal entrenada. Estas estrategias terminan solas al completar el mapa; las aleatorias paran al 95 %.</li>
     </ul>
   </section>
 </main>
 
-<script src="sim.js?v=3"></script>
-<script src="ai.js?v=3"></script>
-<script src="app.js?v=3"></script>
+<script src="sim.js?v=4"></script>
+<script src="ai.js?v=4"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>

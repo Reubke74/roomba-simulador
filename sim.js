@@ -215,7 +215,7 @@
       this.at95 = null;
       this.mode = 'spiral'; this.sr = 1; this.timer = 0; this.straight = 0;
       if (algo === 'random') this.mode = 'straight';
-      this.pi = 0;
+      this.pi = 0; this.fol = 0; this.folN = 0; this.bumpPi = -1; this.tries = 0;
       this.f = { moved: false, turning: false };
     }
 
@@ -271,12 +271,22 @@
         const dx = wp.x - this.x, dy = wp.y - this.y, d = Math.hypot(dx, dy);
         if (d < 1e-6) { this.pi++; return; }
         const want = Math.atan2(dy, dx), diff = norm(want - this.th);
+        if (this.fol > 0) {       // rodeando un obstáculo que su plano no tenía (pared a la derecha)
+          this.fol--; this.folN++;
+          if (this.folN > 6 && this.probe(1.2, want)) this.fol = 0;      // ya hay paso libre hacia el punto: retoma el plan
+          else { this.wallStep(); if (this.fol === 0) this.pi++; return; } // si se agota el tiempo, salta al siguiente punto
+        }
         if (Math.abs(diff) > 0.02) this.startTurn(diff);
         else {
           const m = Math.min(V, d);
-          if (this.env.stale) {   // el plano guardado ya no coincide con la casa: choca y salta al siguiente punto
+          if (this.env.stale) {   // el plano guardado ya no coincide con la casa: choca y trata de rodear
             const cx = Math.floor(this.x + Math.cos(want) * m), cy = Math.floor(this.y + Math.sin(want) * m);
-            if (!this.env.valid[cy * W + cx]) { this.bumps++; this.pi++; return; }
+            if (!this.env.valid[cy * W + cx]) {
+              this.bumps++;
+              if (this.bumpPi !== this.pi) { this.bumpPi = this.pi; this.tries = 0; }
+              if (++this.tries > 2) { this.pi++; return; }   // tras dos intentos fallidos desiste de ese punto
+              this.fol = 100; this.folN = 0; return;
+            }
           }
           this.th = want; this.x += Math.cos(want) * m; this.y += Math.sin(want) * m;
           this.dist += m; this.f.moved = true;
