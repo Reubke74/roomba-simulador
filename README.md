@@ -15,6 +15,15 @@ Muestra trayectorias, superficie a barrer / barrida / pendiente / re-barrida, co
 
     python -m http.server 8765
 
+## Pruebas automáticas
+`tests.js` comprueba que el motor sigue dando los resultados de referencia (semilla 7) y cumple sus invariantes y las
+afirmaciones que muestra la página (29 pruebas, menos de 1 s). Se ejecutan de dos formas:
+
+    npm test          # en la terminal (requiere Node)
+
+o abriendo `tests.html` en el navegador (también en el sitio publicado). Si cambias a propósito el comportamiento de un
+robot, actualiza la tabla `REF` de `tests.js`.
+
 ## Supuestos que conviene verificar
 - Precios de CFE (`TARIFAS` en `app.js`): tomados de la página oficial de la Tarifa 1 (app.cfe.mx) para noviembre de 2026. CFE los cambia cada mes; hay que actualizarlos.
 - Consumo (18 W en marcha, +3 W del sensor de la IA), batería de 30 Wh y pérdidas del cargador (0.85): valores ilustrativos.

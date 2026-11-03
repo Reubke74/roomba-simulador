@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pruebas del simulador</title>
+<style>
+  body{margin:0;padding:20px 16px 40px;max-width:960px;margin-inline:auto;background:#0d1118;color:#e6ebf4;font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  h1{margin:0 0 4px;font-size:1.4rem} p{color:#93a0b6;margin:4px 0 12px}
+  #sum{font-weight:700;font-size:1.1rem;color:#e6ebf4}
+  #sum.ok{color:#4cc38a} #sum.bad{color:#e5484d}
+  button{font:inherit;color:#e6ebf4;background:#1e2838;border:1px solid #242d3d;border-radius:8px;padding:7px 14px;cursor:pointer}
+  table{border-collapse:collapse;width:100%;margin-top:14px;font-size:.9rem}
+  td,th{padding:6px 8px;border-bottom:1px solid #242d3d;text-align:left;vertical-align:top}
+  td.ok{color:#4cc38a;width:28px} td.bad{color:#e5484d;width:28px} td.msg{color:#93a0b6}
+  tr.sep th{padding-top:16px;font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;color:#93a0b6;border-bottom:0}
+  a{color:#4c9be8}
+</style>
+</head>
+<body>
+<h1>Pruebas automáticas del simulador</h1>
+<p>Comprueban que el motor sigue dando los resultados de referencia y cumple sus invariantes. Las mismas pruebas corren en la terminal con <code>npm test</code>. Si cambias a propósito el comportamiento de un robot, actualiza la tabla <code>REF</code> de <code>tests.js</code>. <a href="index.html">Volver al simulador</a></p>
+<p id="sum">Ejecutando…</p>
+<button id="run">Volver a ejecutar</button>
+<table id="t"></table>
+
+<script src="sim.js?v=4"></script>
+<script src="ai.js?v=4"></script>
+<script src="tests.js?v=4"></script>
+<script>
+(function () {
+  const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  function show() {
+    const r = window.RoombaTests.runAll();
+    document.getElementById('t').innerHTML = r.rows.map(x => x.sep
+      ? '<tr class="sep"><th colspan="3">' + esc(x.sep) + '</th></tr>'
+      : '<tr><td class="' + (x.ok ? 'ok' : 'bad') + '">' + (x.ok ? '✔' : '✘') + '</td><td>' + esc(x.name) + '</td><td class="msg">' + esc(x.msg || '') + '</td></tr>').join('');
+    const s = document.getElementById('sum'), ok = r.pass === r.total;
+    s.textContent = r.pass + ' de ' + r.total + ' pruebas pasan (' + r.secs + ' s)' + (ok ? ' ✔' : ' ✘');
+    s.className = ok ? 'ok' : 'bad';
+    document.title = (ok ? 'OK' : 'FALLAN') + ' · pruebas del simulador';
+    window.__testResults = { passed: r.pass, total: r.total, failed: r.rows.filter(x => x.ok === false).map(x => ({ name: x.name, msg: x.msg })) };
+  }
+  document.getElementById('run').onclick = () => { window.RoombaTests.reset(); document.getElementById('sum').textContent = 'Ejecutando…'; setTimeout(show, 20); };
+  setTimeout(show, 20);
+})();
+</script>
+</body>
+</html>

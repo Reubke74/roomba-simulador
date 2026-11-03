@@ -1,0 +1,10 @@
+{
+  "name": "roomba-simulador",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Simulador de aspiradora robot sin IA y con IA",
+  "scripts": {
+    "test": "node tests.js",
+    "start": "python -m http.server 8765"
+  }
+}
