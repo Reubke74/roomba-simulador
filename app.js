@@ -2,7 +2,7 @@
   'use strict';
   const { Sim, buildEnv, ALGOS, FURNITURE, DOCK, W, H, BATTERY_WH, CELL_M } = window.RoombaSim;
   const S = 8;                                   // píxeles por celda
-  const COLORS = { random: '#4c9be8', roomba: '#f0a03c', planned: '#4cc38a' };
+  const COLORS = { random: '#4c9be8', roomba: '#f0a03c', planned: '#4cc38a', ai: '#b48ef7' };
   const KEYS = Object.keys(ALGOS);
   const HEAT = [null, [47, 158, 122], [217, 164, 65], [232, 116, 59], [229, 72, 77]];
   const PAD = { l: 40, t: 34, r: 40, b: 8 };     // margen del mapa para las cotas
@@ -16,6 +16,10 @@
   map.width = W * S + PAD.l + PAD.r; map.height = H * S + PAD.t + PAD.b;
   const heat = document.createElement('canvas'); heat.width = W; heat.height = H;
   const hctx = heat.getContext('2d'); const himg = hctx.createImageData(W, H);
+  // niebla: lo que el robot con IA todavía no conoce
+  const fog = document.createElement('canvas'); fog.width = W; fog.height = H;
+  const fctx = fog.getContext('2d'); const fimg = fctx.createImageData(W, H);
+  for (let i = 0; i < W * H; i++) { fimg.data[i * 4] = 6; fimg.data[i * 4 + 1] = 9; fimg.data[i * 4 + 2] = 14; }
 
   // capa estática: suelo + muros + muebles
   const stat = document.createElement('canvas'); stat.width = W * S; stat.height = H * S;
@@ -114,6 +118,12 @@
       for (let c = 0; c < W * H; c++) if (sim.visits[c]) ctx.fillRect((c % W) * S, ((c / W) | 0) * S, S, S);
     }
     ctx.drawImage(obst, 0, 0);
+    if (sel === 'ai' && sim.known && $('lyFog').checked) {
+      for (let c = 0; c < W * H; c++) fimg.data[c * 4 + 3] = sim.known[c] === 0 ? 185 : 0;
+      fctx.putImageData(fimg, 0, 0);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(fog, 0, 0, W * S, H * S);
+    }
     // trayectoria incremental
     const tc = trails[sel].getContext('2d'), tr = sim.trail;
     if (drawn[sel] < tr.length - 2) {
@@ -232,7 +242,7 @@
     }
     requestAnimationFrame(loop);
   }
-  ['lyTrail', 'lyHeat', 'tarifa', 'iva'].forEach(id => $(id).onchange = () => update());
+  ['lyTrail', 'lyHeat', 'lyFog', 'tarifa', 'iva'].forEach(id => $(id).onchange = () => update());
 
   make(); refreshTabs(); update(true); requestAnimationFrame(loop);
   window.__roomba = { get sims() { return sims; }, env };

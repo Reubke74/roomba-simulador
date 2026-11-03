@@ -12,7 +12,7 @@
   const R = 1.75, R2 = R * R;   // radio de la boquilla/cuerpo en celdas
   const CELL_M = 0.1;
   const RECENT = 30;        // pasos: dentro de esta ventana no cuenta como "nueva pasada"
-  const POWER = { base: 3, brush: 10, drive: 5, turn: 3 };   // W
+  const POWER = { base: 3, brush: 10, drive: 5, turn: 3, ai: 3 };   // W (ai: láser + procesador)
   const BATTERY_WH = 30;
   const TARGET = 0.95;
   const DOCK = { x: 4.5, y: 30.5 };
@@ -41,6 +41,10 @@
     planned: {
       name: 'Zigzag planificado', long: 'Zigzag planificado por habitación',
       desc: 'Conoce el plano y limpia en carriles paralelos, primero una habitación y luego la otra. Es un plan fijo calculado con búsqueda clásica de caminos (BFS): no aprende ni se adapta.',
+    },
+    ai: {
+      name: 'Robot con IA', long: 'Robot con IA (mapea y planifica)',
+      desc: 'No conoce el plano: un sensor láser simulado va construyendo un mapa mientras limpia y el planificador decide en cada momento la zona sucia más cercana, evitando repetir y adaptándose a lo que descubre. Gasta 3 W más por sensor y procesador. Es IA de robótica (percepción + planificación), no una red neuronal.',
     },
   };
 
@@ -175,7 +179,7 @@
   /* ---------- robot ---------- */
   class Sim {
     constructor(algo, seed, env) {
-      this.algo = algo; this.env = env; this.rand = rng(seed * 7919 + (algo === 'random' ? 1 : algo === 'roomba' ? 2 : 3));
+      this.algo = algo; this.env = env; this.rand = rng(seed * 7919 + ({ random: 1, roomba: 2, planned: 3, ai: 4 })[algo]);
       this.x = DOCK.x; this.y = DOCK.y;
       this.th = algo === 'planned' ? 0 : this.rand() * 2 * Math.PI;
       this.pend = 0; this.stepN = 0;
@@ -238,6 +242,8 @@
           this.wallStep();
           if (--this.timer <= 0) { this.mode = 'straight'; this.straight = 0; this.startTurn((this.rand() - 0.5) * 2 * Math.PI); }
         }
+      } else if (this.algo === 'ai') {
+        this.behaveAI();
       } else {
         const wp = this.env.plan[this.pi];
         if (!wp) { this.finish('Plan completado'); return; }
@@ -279,7 +285,7 @@
       if (this.pend !== 0) this.applyPend(); else this.behave();
       if (this.done) return;
       const { moved, turning } = this.f;
-      const P = POWER.base + POWER.brush + (moved ? POWER.drive : turning ? POWER.turn : 0);
+      const P = POWER.base + POWER.brush + (moved ? POWER.drive : turning ? POWER.turn : 0) + (this.algo === 'ai' ? POWER.ai : 0);
       const e = P * DT / 3600;
       this.energy += e; this.stepN++;
       const fresh = (moved || this.stepN === 1) ? this.footprint() : 0;
@@ -289,7 +295,7 @@
       const cov = this.cleaned / this.env.nClean;
       if (this.stepN % 10 === 0) this.hist.push([this.energy, cov, this.stepN * DT / 60]);
       if (!this.at95 && cov >= TARGET) this.at95 = { t: this.stepN * DT, dist: this.dist * CELL_M, energy: this.energy };
-      if (this.algo !== 'planned' && cov >= TARGET) this.finish('Objetivo 95 % alcanzado');
+      if ((this.algo === 'random' || this.algo === 'roomba') && cov >= TARGET) this.finish('Objetivo 95 % alcanzado');
       else if (this.energy >= BATTERY_WH) this.finish('Batería agotada');
     }
 
