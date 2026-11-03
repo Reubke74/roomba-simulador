@@ -60,18 +60,26 @@
     return false;
   };
 
-  // paso estrecho (p. ej. una puerta): espacio libre de <= 0.9 m entre dos obstáculos vistos
+  // Una puerta es estrecha y CORTA (el grosor de un muro); un pasillo entre un mueble y la pared es estrecho y largo.
   P.isNarrow = function (x, y, memo) {
     const c = y * W + x;
     if (memo[c]) return memo[c] === 1;
     const k = this.known, at = (cx, cy) => (cx < 0 || cy < 0 || cx >= W || cy >= H) ? 2 : k[cy * W + cx];
+    const tight = (cx, cy, ax, ay) => {      // espacio libre <= 0.9 m entre dos obstáculos vistos en el eje (ax, ay)
+      if (at(cx, cy) !== 1) return false;
+      let u = 0, d = 0;
+      while (u < 10 && at(cx - ax * (u + 1), cy - ay * (u + 1)) === 1) u++;
+      while (d < 10 && at(cx + ax * (d + 1), cy + ay * (d + 1)) === 1) d++;
+      return u < 10 && d < 10 && at(cx - ax * (u + 1), cy - ay * (u + 1)) === 2 &&
+        at(cx + ax * (d + 1), cy + ay * (d + 1)) === 2 && u + d + 1 <= 9;
+    };
     let narrow = false;
     for (const [ax, ay] of [[0, 1], [1, 0]]) {
-      let u = 0, d = 0;
-      while (u < 10 && at(x - ax * (u + 1), y - ay * (u + 1)) === 1) u++;
-      while (d < 10 && at(x + ax * (d + 1), y + ay * (d + 1)) === 1) d++;
-      if (u < 10 && d < 10 && at(x - ax * (u + 1), y - ay * (u + 1)) === 2 &&
-        at(x + ax * (d + 1), y + ay * (d + 1)) === 2 && u + d + 1 <= 9) { narrow = true; break; }
+      if (!tight(x, y, ax, ay)) continue;
+      let len = 1;                           // largo del tramo estrecho, perpendicular al eje
+      for (let s = 1; s <= 5 && tight(x - ay * s, y - ax * s, ax, ay); s++) len++;
+      for (let s = 1; s <= 5 && tight(x + ay * s, y + ax * s, ax, ay); s++) len++;
+      if (len <= 4) { narrow = true; break; }
     }
     memo[c] = narrow ? 1 : 2;
     return narrow;
@@ -79,7 +87,7 @@
 
   // elige el siguiente destino; devuelve false si ya no queda nada por limpiar ni explorar
   P.plan = function () {
-    const k = this.known;
+    const k = this.known, pr = this.pr || (this.pr = { t0: 7, t1: 3, run: 3, turnW: 1.5, side: 2, c0: 1, skip2: true });
     if (this.fpend >= 0) {            // lo que sigue sin verse tras explorar se da por inaccesible
       const px = this.fpend % W, py = (this.fpend / W) | 0;
       for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
@@ -103,10 +111,11 @@
         const x = c % W, y = (c / W) | 0, d = b;
         const g = this.isNarrow(x, y, memo) ? 0 : this.gain(x, y);
         if (g > 0) {
-          const t = g >= 7 ? 0 : g >= 3 ? 1 : 2;
+          const t = pr.c0 ? (g >= pr.t1 ? 0 : 2) : (g >= pr.t0 ? 0 : g >= pr.t1 ? 1 : 2);
           let score = d;
-          if (d > 0) score += Math.abs(norm(Math.atan2(y - ry, x - rx) - this.th)) * 0.8;   // evita giros bruscos
-          if ((y - ry) * this.shift < 0) score += 2;                                          // mantiene el sentido del zigzag
+          if (d > 0) score += Math.abs(norm(Math.atan2(y - ry, x - rx) - this.th)) * pr.turnW;   // evita giros bruscos
+          if ((y - ry) * this.shift < 0) score += pr.side;                                        // mantiene el sentido del zigzag
+          if (pr.c0 && t === 0) score = (score + pr.c0) / g;                                      // costo por superficie nueva
           if (!best[t] || score < best[t].score) best[t] = { c, score };
         }
         for (const [dx, dy] of DIRS) {
@@ -121,7 +130,8 @@
     if (!tgt) {                       // nada limpio por hacer a la vista: explorar
       for (const c of q) if (this.nearFrontier(c % W, (c / W) | 0)) { tgt = { c }; explore = true; break; }
     }
-    if (!tgt) tgt = best[2];          // rendijas sueltas
+    this.tier = explore ? 'explorar' : tgt ? (tgt === best[0] ? 'carril' : 'resto') : 'rendija';
+    if (!tgt && !pr.skip2) tgt = best[2];          // rendijas sueltas
     if (!tgt) return false;
 
     const cells = []; for (let c = tgt.c; c !== -1; c = prev[c]) cells.push({ x: c % W, y: (c / W) | 0 });
@@ -143,7 +153,7 @@
         let L = 0;
         for (let s = 1; s <= RANGE; s++) {
           const x = tx + dir * s;
-          if (!this.kvalid(x, ty) || this.gain(x, ty) < 3 || this.isNarrow(x, ty, memo)) break;
+          if (!this.kvalid(x, ty) || this.gain(x, ty) < pr.run || this.isNarrow(x, ty, memo)) break;
           L = s;
         }
         if (L > bestL) { bestL = L; bestDir = dir; }

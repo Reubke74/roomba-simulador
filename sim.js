@@ -29,6 +29,18 @@
     { n: 'Caja', x: 74, y: 22, w: 3, h: 3 },
   ];
 
+  // la misma casa con los muebles cambiados de lugar
+  const FURNITURE_MOVED = [
+    { n: 'Sofá', x: 20, y: 28, w: 20, h: 7 },
+    { n: 'Mesa', x: 10, y: 8, w: 12, h: 8 },
+    { n: 'Librero', x: 50, y: 2, w: 9, h: 8 },
+    { n: 'Silla', x: 44, y: 20, w: 2, h: 2 },
+    { n: 'Cama', x: 62, y: 1, w: 22, h: 14 },
+    { n: 'Armario', x: 93, y: 31, w: 7, h: 8 },
+    { n: 'Escritorio', x: 72, y: 32, w: 13, h: 6 },
+    { n: 'Caja', x: 88, y: 20, w: 3, h: 3 },
+  ];
+
   const ALGOS = {
     random: {
       name: 'Aleatorio', long: 'Aleatorio (choca y gira)',
@@ -49,7 +61,7 @@
   };
 
   /* ---------- entorno ---------- */
-  function buildEnv() {
+  function makeEnv(items) {
     const free = new Uint8Array(W * H).fill(1);
     const block = (x, y, w, h) => {
       for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++)
@@ -58,7 +70,7 @@
     block(0, 0, W, 1); block(0, H - 1, W, 1); block(0, 0, 1, H); block(W - 1, 0, 1, H);
     block(WALL_X, 0, WALL_T, H);
     for (let j = DOOR[0]; j < DOOR[1]; j++) for (let i = WALL_X; i < WALL_X + WALL_T; i++) free[j * W + i] = 1;
-    FURNITURE.forEach(f => block(f.x, f.y, f.w, f.h));
+    items.forEach(f => block(f.x, f.y, f.w, f.h));
 
     // centros donde cabe el robot
     const valid = new Uint8Array(W * H);
@@ -94,9 +106,18 @@
       }
     }
     let nClean = 0; for (let c = 0; c < W * H; c++) nClean += cleanable[c];
-    const env = { free, valid, reach, cleanable, nClean };
+    const env = { free, valid, reach, cleanable, nClean, furniture: items, stale: false };
     env.plan = buildPlan(env);
     return env;
+  }
+
+  // moved = true: la casa real tiene los muebles cambiados, pero el plan guardado es el de la casa original
+  function buildEnv(moved) {
+    const orig = makeEnv(FURNITURE);
+    if (!moved) return orig;
+    const real = makeEnv(FURNITURE_MOVED);
+    real.plan = orig.plan; real.stale = true;
+    return real;
   }
 
   /* ---------- plan del zigzag (BFS + carriles) ---------- */
@@ -246,13 +267,17 @@
         this.behaveAI();
       } else {
         const wp = this.env.plan[this.pi];
-        if (!wp) { this.finish('Plan completado'); return; }
+        if (!wp) { this.finish(this.env.stale ? 'Plan agotado: el plano guardado ya no coincide con la casa' : 'Plan completado'); return; }
         const dx = wp.x - this.x, dy = wp.y - this.y, d = Math.hypot(dx, dy);
         if (d < 1e-6) { this.pi++; return; }
         const want = Math.atan2(dy, dx), diff = norm(want - this.th);
         if (Math.abs(diff) > 0.02) this.startTurn(diff);
         else {
           const m = Math.min(V, d);
+          if (this.env.stale) {   // el plano guardado ya no coincide con la casa: choca y salta al siguiente punto
+            const cx = Math.floor(this.x + Math.cos(want) * m), cy = Math.floor(this.y + Math.sin(want) * m);
+            if (!this.env.valid[cy * W + cx]) { this.bumps++; this.pi++; return; }
+          }
           this.th = want; this.x += Math.cos(want) * m; this.y += Math.sin(want) * m;
           this.dist += m; this.f.moved = true;
           if (d <= V + 1e-9) this.pi++;

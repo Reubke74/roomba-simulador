@@ -10,7 +10,7 @@
   const TARIFAS = { basico: 1.125, intermedio: 1.369, excedente: 4.004 };
   const IVA = 1.16, EFF_CARGA = 0.85;            // IVA 16 %; la pared entrega más que la batería
 
-  const env = buildEnv();
+  let env = buildEnv(false);
   const $ = id => document.getElementById(id);
   const map = $('map'), ctx = map.getContext('2d');
   map.width = W * S + PAD.l + PAD.r; map.height = H * S + PAD.t + PAD.b;
@@ -23,22 +23,22 @@
 
   // capa estática: suelo + muros + muebles
   const stat = document.createElement('canvas'); stat.width = W * S; stat.height = H * S;
-  (function () {
+  function paintStat() {
     const c = stat.getContext('2d');
     c.fillStyle = '#0e131b'; c.fillRect(0, 0, W * S, H * S);
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
       if (env.cleanable[j * W + i]) { c.fillStyle = '#1c2434'; c.fillRect(i * S, j * S, S, S); }
     }
-  })();
+  }
   const obst = document.createElement('canvas'); obst.width = W * S; obst.height = H * S;
-  (function () {
-    const c = obst.getContext('2d');
+  function paintObst() {
+    const c = obst.getContext('2d'); c.clearRect(0, 0, W * S, H * S);
     c.fillStyle = '#2b3547';
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) if (!env.free[j * W + i]) c.fillRect(i * S, j * S, S, S);
     c.fillStyle = '#44516c';
-    FURNITURE.forEach(f => c.fillRect(f.x * S, f.y * S, f.w * S, f.h * S));
+    env.furniture.forEach(f => c.fillRect(f.x * S, f.y * S, f.w * S, f.h * S));
     c.fillStyle = '#c3cce0'; c.font = '600 11px system-ui,sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-    FURNITURE.forEach(f => { if (f.w >= 6 && f.h >= 6) c.fillText(f.n, (f.x + f.w / 2) * S, (f.y + f.h / 2) * S); });
+    env.furniture.forEach(f => { if (f.w >= 6 && f.h >= 6) c.fillText(f.n, (f.x + f.w / 2) * S, (f.y + f.h / 2) * S); });
     c.fillStyle = '#7fb4ff'; c.fillRect((DOCK.x - 1.5) * S, (DOCK.y - 1.5) * S, 3 * S, 3 * S);
     c.fillStyle = '#06101c'; c.font = '700 10px system-ui,sans-serif'; c.fillText('base', DOCK.x * S, DOCK.y * S);
     // cota de la puerta
@@ -46,7 +46,8 @@
     const dx = 63.5 * S;
     c.beginPath(); c.moveTo(dx, 16 * S); c.lineTo(dx, 24 * S); c.moveTo(dx - 4, 16 * S); c.lineTo(dx + 4, 16 * S); c.moveTo(dx - 4, 24 * S); c.lineTo(dx + 4, 24 * S); c.stroke();
     c.save(); c.translate(dx + 9, 20 * S); c.rotate(-Math.PI / 2); c.fillText('puerta 0.8 m', 0, 0); c.restore();
-  })();
+  }
+  paintStat(); paintObst();
   // cotas de las habitaciones (fuera del plano)
   const dims = document.createElement('canvas'); dims.width = map.width; dims.height = map.height;
   (function () {
@@ -94,6 +95,7 @@
   /* ---------- botones ---------- */
   $('play').onclick = () => { playing = !playing; $('play').textContent = playing ? 'Pausa' : 'Reanudar'; };
   $('reset').onclick = () => { make(); update(true); };
+  $('moved').onchange = () => { env = buildEnv($('moved').checked); paintStat(); paintObst(); make(); update(true); };
   $('reseed').onclick = () => { seed = (seed * 1103515245 + 12345) % 2147483647; make(); update(true); };
   $('ff').onclick = () => { ff = !ff; $('ff').textContent = ff ? 'Detener' : 'Ejecutar hasta terminar'; if (ff) { playing = true; $('play').textContent = 'Pausa'; } };
 
@@ -246,5 +248,5 @@
   ['lyTrail', 'lyHeat', 'lyFog', 'tarifa', 'iva'].forEach(id => $(id).onchange = () => update());
 
   make(); refreshTabs(); update(true); requestAnimationFrame(loop);
-  window.__roomba = { get sims() { return sims; }, env };
+  window.__roomba = { get sims() { return sims; }, get env() { return env; } };
 })();
