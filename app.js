@@ -184,9 +184,10 @@
       ['Costo/año', r => '$' + (costo(r.m.energy) * 365).toFixed(0)],
       ['Redundancia', r => pct(r.m.redundancy) + '%'],
       ['Efic. energética', r => pct(r.m.energyEff) + '%'],
+      ['Efectividad', r => pct(r.m.coverage * r.m.energyEff) + '%'],
     ];
     const cells = {
-      Redundancia: best(r => r.m.redundancy, true), 'Efic. energética': best(r => r.m.energyEff, false),
+      Redundancia: best(r => r.m.redundancy, true), 'Efic. energética': best(r => r.m.energyEff, false), Efectividad: best(r => r.m.coverage * r.m.energyEff, false),
       Energía: best(r => r.m.energy, true), 'Costo/limpieza': best(r => r.m.energy, true), 'Costo/año': best(r => r.m.energy, true), Distancia: best(r => r.m.dist, true), 'Tiempo a 95 %': bT,
     };
     $('cmp').innerHTML = '<thead><tr><th>Estrategia</th>' + defs.map(d => '<th>' + d[0] + '</th>').join('') + '<th>Estado</th></tr></thead><tbody>' +
