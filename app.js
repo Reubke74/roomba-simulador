@@ -469,3 +469,27 @@
   rebuildEnv(); make(); applyView(); update(); requestAnimationFrame(loop);
   window.__roomba = { get sims() { return sims; }, get env() { return env; }, CFG };
 })();
+/* Asesor generativo: métricas de simulación enviadas a Gemini desde el servidor. */
+(function () {
+  const api = location.hostname === 'roomba-simulador.onrender.com' ? 'https://roomba-generativa.onrender.com' : '';
+  const panel = document.createElement('section');
+  panel.style.cssText = 'max-width:1100px;margin:32px auto;padding:24px;border:1px solid #809d9b;border-radius:16px;background:var(--panel,Canvas);color:var(--text,CanvasText)';
+  panel.innerHTML = '<h2>Asesor generativo con Gemini</h2><p>Compara los resultados actuales de las cuatro estrategias y recibe recomendaciones redactadas por IA generativa. El movimiento de los robots sigue siendo calculado por el simulador.</p><p>Al pulsar el botón se enviarán a Google únicamente el escenario y las métricas de limpieza. Cada análisis hace una llamada API.</p><button type="button" id="gemini-analyze">Analizar resultados con Gemini</button><p id="gemini-status" role="status" aria-live="polite"></p><div id="gemini-answer" style="white-space:pre-wrap;line-height:1.7"></div>';
+  document.body.append(panel);
+  const button = panel.querySelector('button'), status = panel.querySelector('#gemini-status'), answer = panel.querySelector('#gemini-answer');
+  button.onclick = async () => {
+    const state = window.__roomba;
+    if (!state || !Object.values(state.sims).every(s => s.done)) { status.textContent = 'Primero termina la simulación de las cuatro estrategias con «Ir al final».'; return; }
+    const results = Object.entries(state.sims).map(([key, s]) => { const m = s.metrics(); return {name:window.RoombaSim.ALGOS[key].name,coverage:Math.round(m.coverage*10000)/100,energyWh:m.energy,distanceM:m.dist,durationSeconds:m.timeTotal,redundancy:m.redundancy}; });
+    const select = document.getElementById('house');
+    const scenario = (select?.selectedOptions[0]?.textContent || 'Escenario actual') + (document.getElementById('moved')?.checked ? ' con muebles movidos' : '');
+    button.disabled = true; answer.textContent = ''; status.textContent = 'Consultando Gemini. El servidor puede tardar en iniciar…';
+    try {
+      const response = await fetch(api + '/api/analysis',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scenario,results}),signal:AbortSignal.timeout(120000)});
+      const data = await response.json(); if (!response.ok) throw Error(data.error || 'No se pudo obtener el análisis.');
+      answer.textContent = data.analysis;
+      status.textContent = 'IA generativa real · ' + data.model + ' · ' + (data.usage.input + data.usage.output) + ' tokens reportados · ' + (data.durationMs/1000).toFixed(1) + ' s. Resultado del escenario al momento de consultar.';
+    } catch (error) { status.textContent = error.message || 'Error de conexión con Gemini.'; }
+    finally { button.disabled = false; }
+  };
+})();
