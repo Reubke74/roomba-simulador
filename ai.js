@@ -10,16 +10,24 @@
   const norm = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
   const P = Sim.prototype;
 
-  // láser 360°: marca como libre lo que ve y como ocupado lo que lo detiene
+  // láser 360°: marca como libre lo que ve y como ocupado lo que lo detiene.
+  // Con ruido (opts.noise = probabilidad por rayo), un rayo puede dar un eco falso (obstáculo fantasma)
+  // o atravesar los primeros 30 cm de un obstáculo: el mapa se equivoca y el robot lo corrige al chocar o al volver a mirar.
   P.sense = function () {
-    const k = this.known, free = this.env.free;
+    const k = this.known, free = this.free, noise = this.opts.noise || 0;
     for (let a = 0; a < 360; a++) {
       const ang = a * Math.PI / 180, cs = Math.cos(ang), sn = Math.sin(ang);
+      let phantom = -1, pass = 0;
+      if (noise && this.rand() < noise) { if (this.rand() < 0.5) phantom = 2 + this.rand() * (RANGE - 2); else pass = 3; }
       for (let r = 0; r <= RANGE; r += 0.5) {
         const cx = Math.floor(this.x + cs * r), cy = Math.floor(this.y + sn * r);
         if (cx < 0 || cy < 0 || cx >= W || cy >= H) break;
         const c = cy * W + cx;
-        if (!free[c]) { k[c] = 2; break; }
+        if (phantom >= 0 && r >= phantom) { k[c] = 2; break; }
+        if (!free[c]) {
+          if (pass > 0) { pass -= 0.5; k[c] = 1; continue; }
+          k[c] = 2; break;
+        }
         k[c] = 1;
       }
     }
@@ -166,13 +174,26 @@
 
   P.behaveAI = function () {
     if (!this.known) {
-      this.known = new Uint8Array(W * H); this.q = []; this.qi = 0; this.shift = 1; this.fpend = -1;
+      this.known = new Uint8Array(W * H); this.q = []; this.qi = 0; this.shift = 1; this.fpend = -1; this.wait = 0;
       this.sense();
     }
+    if (this.wait > 0) { this.wait--; return; }      // espera un momento tras un choque inesperado
     if (this.stepN % 10 === 0) this.sense();
     if (this.qi >= this.q.length) {
       this.sense();
-      if (!this.plan()) { this.finish('Mapa completo: nada pendiente'); return; }
+      if (!this.plan()) {
+        // con mascota, lo "ocupado" pudo ser ella tapando el paso: olvida esas marcas, espera y vuelve a mirar.
+        // Cada reintento sin haber limpiado algo nuevo cuenta; tras 2 seguidos da por terminado.
+        if (this.opts.pet) {
+          if (this.cleaned > (this.clearMark || 0) + 20) this.petRetry = 0;
+          if ((this.petRetry = (this.petRetry || 0) + 1) <= 2) {
+            this.clearMark = this.cleaned;
+            for (let c = 0; c < this.known.length; c++) if (this.known[c] === 2) this.known[c] = 0;
+            this.wait = 40; return;
+          }
+        }
+        this.finish('Mapa completo: nada pendiente'); return;
+      }
     }
     const wp = this.q[this.qi];
     const dx = wp.x - this.x, dy = wp.y - this.y, d = Math.hypot(dx, dy);
@@ -181,8 +202,13 @@
     if (Math.abs(diff) > 0.02) this.startTurn(diff);
     else {
       const m = Math.min(V, d);
+      const cx = Math.floor(this.x + Math.cos(want) * m), cy = Math.floor(this.y + Math.sin(want) * m);
+      if (!this.valid[cy * W + cx]) {      // algo que no estaba en su mapa (error del sensor, mascota): choca, lo anota y replanifica
+        this.bumps++; this.known[cy * W + cx] = 2; this.qi = this.q.length; this.wait = 8; return;
+      }
       this.th = want; this.x += Math.cos(want) * m; this.y += Math.sin(want) * m;
       this.dist += m; this.f.moved = true;
+      if (this.opts.noise) this.th += (this.rand() - 0.5) * this.opts.noise * 1.6;    // deriva de rumbo del odómetro
       if (d <= V + 1e-9) this.qi++;
     }
   };

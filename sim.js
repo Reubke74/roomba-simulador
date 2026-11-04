@@ -1,23 +1,30 @@
-/* Simulador de aspiradora robot SIN inteligencia artificial.
+/* Simulador de aspiradora robot SIN inteligencia artificial (y un robot CON IA en ai.js).
  * Solo reglas fijas (máquinas de estados), sensores de choque y azar.
- * Rejilla: 1 celda = 10 cm. Dos habitaciones unidas por una puerta de 80 cm.
+ * Rejilla: 1 celda = 10 cm. Varias casas de 10,2 × 4,0 m como máximo, con puertas de 80 cm.
  */
 (function (root) {
   'use strict';
 
-  const W = 102, H = 40, WALL_X = 60, WALL_T = 2;
+  const W = 102, H = 40;
   const V = 0.3;            // celdas por paso  -> 0.3 m/s con DT = 0.1 s
   const DT = 0.1;           // s por paso
   const TURN = 0.2;         // rad por paso -> 2 rad/s
   const R = 1.75, R2 = R * R;   // radio de la boquilla/cuerpo en celdas
   const CELL_M = 0.1;
   const RECENT = 30;        // pasos: dentro de esta ventana no cuenta como "nueva pasada"
-  const POWER = { base: 3, brush: 10, drive: 5, turn: 3, ai: 3 };   // W (ai: láser + procesador)
-  const BATTERY_WH = 30;
   const TARGET = 0.95;
-  const DOCK = { x: 4.5, y: 30.5 };
-  const DOOR = [16, 24];    // filas libres en el muro (8 celdas = 80 cm)
 
+  // Supuestos de energía (editables desde la página). Potencias en W, batería en Wh.
+  const CFG = { base: 3, brush: 10, drive: 5, turn: 3, ai: 3, carpet: 8, battery: 30, charger: 0.85, chargeMin: 90 };
+  const POWER = CFG;
+  const PRESETS = {
+    ilustrativo: { label: 'Ilustrativo (por defecto)', base: 3, brush: 10, drive: 5, turn: 3, ai: 3, carpet: 8, battery: 30, charger: 0.85, chargeMin: 90 },
+    // Roborock S7 según listados comerciales: 5200 mAh, 14,4 V (68 Wh), 180 min de autonomía (≈ 22,7 W de media) y 360 min de carga.
+    // Con el sensor de la IA (3 W) la potencia en marcha suma 22,7 W; sin él, 19,7 W.
+    s7: { label: 'Referencia: Roborock S7 (ficha técnica)', base: 3, brush: 11.7, drive: 5, turn: 3, ai: 3, carpet: 8, battery: 68, charger: 0.85, chargeMin: 360 },
+  };
+
+  /* ---------- casas ---------- */
   const FURNITURE = [
     { n: 'Sofá', x: 6, y: 2, w: 20, h: 7 },
     { n: 'Mesa', x: 30, y: 16, w: 12, h: 8 },
@@ -41,6 +48,54 @@
     { n: 'Caja', x: 88, y: 20, w: 3, h: 3 },
   ];
 
+  // walls y doors: rectángulos [x, y, ancho, alto]. rooms: para las cotas. plan: zonas de los carriles del zigzag.
+  const HOUSES = {
+    dos: {
+      name: 'Dos habitaciones',
+      walls: [[60, 0, 2, 40]], doors: [[60, 16, 2, 8]],
+      dock: { x: 4.5, y: 30.5 },
+      rooms: [{ n: 'Sala', x0: 0, x1: 60 }, { n: 'Dormitorio', x0: 62, x1: 102 }],
+      plan: [{ x0: 1, x1: 59, y0: 1, y1: 38 }, { x0: 62, x1: 100, y0: 1, y1: 38 }],
+      furniture: FURNITURE, moved: FURNITURE_MOVED,
+      carpets: [{ x: 8, y: 11, w: 22, h: 14 }, { x: 70, y: 18, w: 18, h: 12 }],
+    },
+    tres: {
+      name: 'Tres habitaciones',
+      walls: [[34, 0, 2, 40], [68, 0, 2, 40]], doors: [[34, 10, 2, 8], [68, 24, 2, 8]],
+      dock: { x: 3.5, y: 36.5 },
+      rooms: [{ n: 'Cocina', x0: 0, x1: 34 }, { n: 'Sala', x0: 36, x1: 68 }, { n: 'Dormitorio', x0: 70, x1: 102 }],
+      plan: [{ x0: 1, x1: 33, y0: 1, y1: 38 }, { x0: 36, x1: 67, y0: 1, y1: 38 }, { x0: 70, x1: 100, y0: 1, y1: 38 }],
+      furniture: [
+        { n: 'Barra', x: 1, y: 1, w: 22, h: 5 }, { n: 'Comedor', x: 10, y: 18, w: 14, h: 9 }, { n: 'Refri', x: 28, y: 1, w: 5, h: 6 },
+        { n: 'Sofá', x: 40, y: 30, w: 20, h: 7 }, { n: 'TV', x: 44, y: 1, w: 12, h: 3 }, { n: 'Mesa', x: 46, y: 16, w: 8, h: 6 }, { n: 'Planta', x: 63, y: 2, w: 3, h: 3 },
+        { n: 'Cama', x: 80, y: 1, w: 20, h: 14 }, { n: 'Closet', x: 71, y: 1, w: 7, h: 12 }, { n: 'Buró', x: 72, y: 34, w: 5, h: 4 }, { n: 'Escritorio', x: 88, y: 32, w: 11, h: 6 },
+      ],
+      moved: [
+        { n: 'Barra', x: 1, y: 1, w: 5, h: 22 }, { n: 'Comedor', x: 12, y: 28, w: 14, h: 9 }, { n: 'Refri', x: 28, y: 1, w: 5, h: 6 },
+        { n: 'Sofá', x: 38, y: 2, w: 20, h: 7 }, { n: 'TV', x: 50, y: 35, w: 12, h: 3 }, { n: 'Mesa', x: 50, y: 20, w: 8, h: 6 }, { n: 'Planta', x: 38, y: 30, w: 3, h: 3 },
+        { n: 'Cama', x: 80, y: 24, w: 20, h: 14 }, { n: 'Closet', x: 90, y: 1, w: 10, h: 6 }, { n: 'Buró', x: 72, y: 2, w: 5, h: 4 }, { n: 'Escritorio', x: 80, y: 1, w: 8, h: 6 },
+      ],
+      carpets: [{ x: 40, y: 10, w: 20, h: 16 }, { x: 74, y: 16, w: 22, h: 14 }],
+    },
+    abierto: {
+      name: 'Estudio abierto',
+      walls: [], doors: [],
+      dock: { x: 3.5, y: 36.5 },
+      rooms: [{ n: 'Estudio', x0: 0, x1: 102 }],
+      plan: [{ x0: 1, x1: 100, y0: 1, y1: 38 }],
+      furniture: [
+        { n: 'Sofá', x: 10, y: 1, w: 22, h: 7 }, { n: 'Isla', x: 40, y: 15, w: 20, h: 8 }, { n: 'Mesa', x: 70, y: 28, w: 14, h: 8 },
+        { n: 'Cama', x: 84, y: 1, w: 17, h: 14 }, { n: '', x: 35, y: 30, w: 3, h: 3 }, { n: '', x: 62, y: 8, w: 3, h: 3 }, { n: 'Librero', x: 1, y: 14, w: 4, h: 12 },
+      ],
+      moved: [
+        { n: 'Sofá', x: 50, y: 30, w: 22, h: 7 }, { n: 'Isla', x: 12, y: 15, w: 20, h: 8 }, { n: 'Mesa', x: 76, y: 14, w: 14, h: 8 },
+        { n: 'Cama', x: 1, y: 1, w: 17, h: 8 }, { n: '', x: 45, y: 8, w: 3, h: 3 }, { n: '', x: 28, y: 30, w: 3, h: 3 }, { n: 'Librero', x: 97, y: 14, w: 4, h: 12 },
+      ],
+      carpets: [{ x: 14, y: 12, w: 24, h: 16 }, { x: 64, y: 14, w: 22, h: 14 }],
+    },
+  };
+  const DOCK = HOUSES.dos.dock;
+
   const ALGOS = {
     random: {
       name: 'Aleatorio', long: 'Aleatorio (choca y gira)',
@@ -56,20 +111,20 @@
     },
     ai: {
       name: 'Robot con IA', long: 'Robot con IA (mapea y planifica)',
-      desc: 'No conoce el plano: un sensor láser simulado va construyendo un mapa mientras limpia y el planificador decide en cada momento la zona sucia más cercana, evitando repetir y adaptándose a lo que descubre. Gasta 3 W más por sensor y procesador. Es IA de robótica (percepción + planificación), no una red neuronal.',
+      desc: 'No conoce el plano: un sensor láser simulado va construyendo un mapa mientras limpia y el planificador decide en cada momento la zona sucia más cercana, evitando repetir y adaptándose a lo que descubre. Gasta energía extra por el sensor y el procesador (editable en Supuestos). Es IA de robótica (percepción + planificación), no una red neuronal.',
     },
   };
 
   /* ---------- entorno ---------- */
-  function makeEnv(items) {
+  function makeEnv(items, house) {
     const free = new Uint8Array(W * H).fill(1);
     const block = (x, y, w, h) => {
       for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++)
         if (i >= 0 && i < W && j >= 0 && j < H) free[j * W + i] = 0;
     };
     block(0, 0, W, 1); block(0, H - 1, W, 1); block(0, 0, 1, H); block(W - 1, 0, 1, H);
-    block(WALL_X, 0, WALL_T, H);
-    for (let j = DOOR[0]; j < DOOR[1]; j++) for (let i = WALL_X; i < WALL_X + WALL_T; i++) free[j * W + i] = 1;
+    house.walls.forEach(w => block(w[0], w[1], w[2], w[3]));
+    house.doors.forEach(d => { for (let j = d[1]; j < d[1] + d[3]; j++) for (let i = d[0]; i < d[0] + d[2]; i++) free[j * W + i] = 1; });
     items.forEach(f => block(f.x, f.y, f.w, f.h));
 
     // centros donde cabe el robot
@@ -84,7 +139,7 @@
     }
     // alcanzables desde la base
     const reach = new Uint8Array(W * H);
-    const sx = Math.floor(DOCK.x), sy = Math.floor(DOCK.y);
+    const sx = Math.floor(house.dock.x), sy = Math.floor(house.dock.y);
     const q = [sy * W + sx]; reach[q[0]] = 1;
     for (let k = 0; k < q.length; k++) {
       const c = q[k], x = c % W, y = (c / W) | 0;
@@ -106,16 +161,19 @@
       }
     }
     let nClean = 0, nFree = 0; for (let c = 0; c < W * H; c++) { nClean += cleanable[c]; nFree += free[c]; }
-    const env = { free, valid, reach, cleanable, nClean, nFree, furniture: items, stale: false };
+    const carpet = new Uint8Array(W * H);
+    (house.carpets || []).forEach(r => { for (let j = r.y; j < r.y + r.h; j++) for (let i = r.x; i < r.x + r.w; i++) if (free[j * W + i]) carpet[j * W + i] = 1; });
+    const env = { free, valid, reach, cleanable, carpet, nClean, nFree, furniture: items, stale: false, house, dock: house.dock };
     env.plan = buildPlan(env);
     return env;
   }
 
   // moved = true: la casa real tiene los muebles cambiados, pero el plan guardado es el de la casa original
-  function buildEnv(moved) {
-    const orig = makeEnv(FURNITURE);
+  function buildEnv(moved, houseKey) {
+    const house = HOUSES[houseKey || 'dos'];
+    const orig = makeEnv(house.furniture, house);
     if (!moved) return orig;
-    const real = makeEnv(FURNITURE_MOVED);
+    const real = makeEnv(house.moved, house);
     real.plan = orig.plan; real.stale = true;
     return real;
   }
@@ -157,14 +215,13 @@
     };
 
     const wps = [];
-    let cur = { x: Math.floor(DOCK.x), y: Math.floor(DOCK.y) };
+    let cur = { x: Math.floor(env.dock.x), y: Math.floor(env.dock.y) };
     const goTo = p => {
       if (cur.x === p.x && cur.y === p.y) return;
       bfs(cur, p).forEach(c => wps.push({ x: c.x + .5, y: c.y + .5 }));
       cur = p;
     };
-    const rooms = [{ x0: 1, x1: 59, y0: 1, y1: 38 }, { x0: 62, x1: 100, y0: 1, y1: 38 }];
-    for (const room of rooms) {
+    for (const room of env.house.plan) {
       const lanes = []; let y = room.y0 + 1;
       for (;;) { lanes.push(y); if (y + 1 >= room.y1) break; y += 3; if (y + 1 > room.y1) y = room.y1 - 1; }
       let dir = 1;
@@ -198,14 +255,18 @@
   const norm = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
 
   /* ---------- robot ---------- */
+  // opts: { pet, carpet, recharge, noise } (todo opcional)
   class Sim {
-    constructor(algo, seed, env) {
-      this.algo = algo; this.env = env; this.rand = rng(seed * 7919 + ({ random: 1, roomba: 2, planned: 3, ai: 4 })[algo]);
-      this.x = DOCK.x; this.y = DOCK.y;
+    constructor(algo, seed, env, opts) {
+      this.algo = algo; this.env = env; this.opts = opts || {};
+      this.rand = rng(seed * 7919 + ({ random: 1, roomba: 2, planned: 3, ai: 4 })[algo]);
+      this.x = env.dock.x; this.y = env.dock.y;
       this.th = algo === 'planned' ? 0 : this.rand() * 2 * Math.PI;
       this.pend = 0; this.stepN = 0;
       this.freshAvg = V * 3;
-      this.dist = 0; this.energy = 0; this.wasted = 0; this.bumps = 0; this.turnRad = 0;
+      this.dist = 0; this.energy = 0; this.cycleE = 0; this.wasted = 0; this.bumps = 0; this.turnRad = 0;
+      this.recharges = 0; this.chargeS = 0; this.tripS = 0; this.carpetE = 0;
+      this.valid = env.valid; this.free = env.free;     // con mascota, cada robot tiene su propia copia
       this.visits = new Uint16Array(W * H);
       this.lastSeen = new Int32Array(W * H).fill(-1e9);
       this.cleaned = 0; this.totalVisits = 0;
@@ -217,6 +278,39 @@
       if (algo === 'random') this.mode = 'straight';
       this.pi = 0; this.fol = 0; this.folN = 0; this.bumpPi = -1; this.tries = 0;
       this.f = { moved: false, turning: false };
+      if (this.opts.pet) this.initPet(seed);
+    }
+
+    /* mascota: obstáculo móvil que bloquea el paso donde está (misma trayectoria para todos los robots) */
+    initPet(seed) {
+      this.valid = Uint8Array.from(this.env.valid); this.free = Uint8Array.from(this.env.free);
+      this.petRand = rng(seed * 104729 + 11);
+      let x, y, tries = 0;
+      do { x = 5 + this.petRand() * (W - 10); y = 3 + this.petRand() * (H - 6); tries++; }
+      while ((!this.env.valid[Math.floor(y) * W + Math.floor(x)] || Math.hypot(x - this.env.dock.x, y - this.env.dock.y) < 20) && tries < 500);
+      this.pet = { x, y, th: this.petRand() * 2 * Math.PI };
+      this.petApply(null);
+    }
+    petApply(old) {
+      const sweep = (p, set) => {
+        for (let j = Math.floor(p.y) - 5; j <= Math.floor(p.y) + 5; j++) for (let i = Math.floor(p.x) - 5; i <= Math.floor(p.x) + 5; i++) {
+          if (i < 0 || j < 0 || i >= W || j >= H) continue;
+          const c = j * W + i;
+          if (!set) { this.valid[c] = this.env.valid[c]; this.free[c] = this.env.free[c]; continue; }
+          if (Math.hypot(i + .5 - p.x, j + .5 - p.y) < 4.25) this.valid[c] = 0;
+          if (Math.hypot(i + .5 - p.x, j + .5 - p.y) <= 2.5) this.free[c] = 0;
+        }
+      };
+      if (old) sweep(old, false);
+      sweep(this.pet, true);
+    }
+    stepPet() {
+      const p = this.pet, old = { x: p.x, y: p.y };
+      if (this.petRand() < 0.03) p.th += (this.petRand() - 0.5) * 2;
+      const nx = p.x + Math.cos(p.th) * 0.2, ny = p.y + Math.sin(p.th) * 0.2;
+      if (this.env.valid[Math.floor(ny) * W + Math.floor(nx)]) { p.x = nx; p.y = ny; }
+      else p.th += Math.PI / 2 + this.petRand();
+      this.petApply(old);
     }
 
     rot(d) { this.th += d; this.turnRad += Math.abs(d); this.f.turning = true; }
@@ -228,12 +322,12 @@
     }
     probe(d, ang) {
       const x = Math.floor(this.x + Math.cos(ang) * d), y = Math.floor(this.y + Math.sin(ang) * d);
-      return x >= 0 && y >= 0 && x < W && y < H && this.env.valid[y * W + x] === 1;
+      return x >= 0 && y >= 0 && x < W && y < H && this.valid[y * W + x] === 1;
     }
     tryMove(d) {
       const nx = this.x + Math.cos(this.th) * d, ny = this.y + Math.sin(this.th) * d;
       const cx = Math.floor(nx), cy = Math.floor(ny);
-      if (cx < 0 || cy < 0 || cx >= W || cy >= H || !this.env.valid[cy * W + cx]) return false;
+      if (cx < 0 || cy < 0 || cx >= W || cy >= H || !this.valid[cy * W + cx]) return false;
       this.x = nx; this.y = ny; this.dist += d; this.f.moved = true; return true;
     }
     randTurn() { return (Math.PI / 2 + this.rand() * Math.PI) * (this.rand() < 0.5 ? -1 : 1); }
@@ -279,9 +373,9 @@
         if (Math.abs(diff) > 0.02) this.startTurn(diff);
         else {
           const m = Math.min(V, d);
-          if (this.env.stale) {   // el plano guardado ya no coincide con la casa: choca y trata de rodear
+          if (this.env.stale || this.opts.pet) {   // el plano guardado no coincide con la casa (o hay una mascota): choca y trata de rodear
             const cx = Math.floor(this.x + Math.cos(want) * m), cy = Math.floor(this.y + Math.sin(want) * m);
-            if (!this.env.valid[cy * W + cx]) {
+            if (!this.valid[cy * W + cx]) {
               this.bumps++;
               if (this.bumpPi !== this.pi) { this.bumpPi = this.pi; this.tries = 0; }
               if (++this.tries > 2) { this.pi++; return; }   // tras dos intentos fallidos desiste de ese punto
@@ -314,24 +408,43 @@
 
     finish(reason) { this.done = true; this.reason = reason; }
 
+    // energía (Wh) y tiempo (s) de volver a la base en línea recta (+30 % por rodeos) sin cepillo
+    tripCost() {
+      const cells = Math.hypot(this.x - this.env.dock.x, this.y - this.env.dock.y) * 1.3;
+      const s = cells * CELL_M / (V * CELL_M / DT);
+      return { cells, s, e: (POWER.base + POWER.drive + (this.algo === 'ai' ? POWER.ai : 0)) * s / 3600 };
+    }
+    recharge(trip) {
+      this.recharges++;
+      this.dist += 2 * trip.cells; this.energy += 2 * trip.e; this.tripS += 2 * trip.s;
+      this.chargeS += CFG.chargeMin * 60;
+      this.cycleE = trip.e;                       // ya con la batería llena, el regreso al punto de limpieza gasta lo mismo
+      if (this.recharges > 50) this.finish('La batería es demasiado pequeña para llegar a la base y volver');
+    }
+
     step() {
       if (this.done) return;
+      if (this.opts.pet) this.stepPet();
       this.f.moved = false; this.f.turning = false;
       if (this.pend !== 0) this.applyPend(); else this.behave();
       if (this.done) return;
       const { moved, turning } = this.f;
-      const P = POWER.base + POWER.brush + (moved ? POWER.drive : turning ? POWER.turn : 0) + (this.algo === 'ai' ? POWER.ai : 0);
+      let P = POWER.base + POWER.brush + (moved ? POWER.drive : turning ? POWER.turn : 0) + (this.algo === 'ai' ? POWER.ai : 0);
+      if (this.opts.carpet && this.env.carpet[Math.floor(this.y) * W + Math.floor(this.x)]) { P += POWER.carpet; this.carpetE += POWER.carpet * DT / 3600; }
       const e = P * DT / 3600;
-      this.energy += e; this.stepN++;
+      this.energy += e; this.cycleE += e; this.stepN++;
       const fresh = (moved || this.stepN === 1) ? this.footprint() : 0;
       this.freshAvg = this.freshAvg * 0.93 + fresh * 0.07;   // las celdas nuevas llegan a ráfagas: se suaviza
       this.wasted += e * (moved ? Math.min(1, Math.max(0, 1 - this.freshAvg / (V * 3))) : 1);
       if (moved) this.trail.push(this.x, this.y);
       const cov = this.cleaned / this.env.nClean;
-      if (this.stepN % 10 === 0) this.hist.push([this.energy, cov, this.stepN * DT / 60]);
-      if (!this.at95 && cov >= TARGET) this.at95 = { t: this.stepN * DT, dist: this.dist * CELL_M, energy: this.energy };
+      if (this.stepN % 10 === 0) this.hist.push([this.energy, cov, (this.stepN * DT + this.tripS) / 60]);
+      if (!this.at95 && cov >= TARGET) this.at95 = { t: this.stepN * DT + this.tripS, dist: this.dist * CELL_M, energy: this.energy };
       if ((this.algo === 'random' || this.algo === 'roomba') && cov >= TARGET) this.finish('Objetivo 95 % alcanzado');
-      else if (this.energy >= BATTERY_WH) this.finish('Batería agotada');
+      else if (this.opts.recharge) {
+        const trip = this.tripCost();
+        if (this.cycleE + trip.e * 1.15 >= CFG.battery) this.recharge(trip);
+      } else if (this.cycleE >= CFG.battery) this.finish('Batería agotada');
     }
 
     metrics() {
@@ -340,8 +453,11 @@
       const distM = this.dist * CELL_M;
       const idealPath = areaM2 / (3 * CELL_M);                         // m con ancho de 30 cm
       const idealE = idealPath / (V * CELL_M / DT) * (POWER.base + POWER.brush + POWER.drive) / 3600;
+      const active = this.stepN * DT + this.tripS;
       return {
-        time: this.stepN * DT, dist: distM, energy: this.energy, battery: Math.max(0, 1 - this.energy / BATTERY_WH),
+        time: active, timeTotal: active + this.chargeS, dist: distM, energy: this.energy,
+        battery: Math.max(0, 1 - this.cycleE / CFG.battery),
+        recharges: this.recharges, chargeMin: this.chargeS / 60, carpetWh: this.carpetE,
         coverage: cov, area: areaM2,
         areaTotal: this.env.nFree * CELL_M * CELL_M, areaReach: this.env.nClean * CELL_M * CELL_M,
         pending: (this.env.nClean - this.cleaned) * CELL_M * CELL_M, gross: this.totalVisits * CELL_M * CELL_M,
@@ -366,7 +482,7 @@
     }
   }
 
-  const api = { Sim, buildEnv, ALGOS, FURNITURE, DOCK, W, H, TARGET, BATTERY_WH, CELL_M, DT, WALL_X, WALL_T, DOOR };
+  const api = { Sim, buildEnv, HOUSES, CFG, PRESETS, ALGOS, FURNITURE, DOCK, W, H, TARGET, CELL_M, DT };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.RoombaSim = api;
 })(typeof window !== 'undefined' ? window : globalThis);

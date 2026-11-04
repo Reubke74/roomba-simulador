@@ -4,14 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Simulador Aspiradora Robot</title>
-<meta name="description" content="Simulación de una aspiradora robot sin IA y con IA en dos habitaciones: trayectorias, superficie barrida, consumo, costo, eficiencia y redundancia.">
-<link rel="stylesheet" href="style.css?v=4">
+<meta name="description" content="Simulación de una aspiradora robot sin IA y con IA en varias casas: trayectorias, superficie barrida, consumo, costo, eficiencia y estadística con muchas semillas.">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 <header>
-  <h1>Aspiradora robot: sin IA y con IA <span>· simulación en dos habitaciones</span></h1>
-  <p>Tres estrategias con reglas fijas y sensores de choque, y un robot con IA que mapea y planifica. Compara trayectoria, superficie barrida, consumo, costo y limpieza repetida.</p>
-  <p class="guide"><b>Cómo usarla:</b> 1) pulsa <b>Ejecutar hasta terminar</b> para ver el resultado final de los cuatro robots · 2) activa <b>Muebles movidos</b> para cambiar la casa · 3) alterna entre <b>Los cuatro</b> y <b>Un robot</b> para ver cada mapa.</p>
+  <h1>Aspiradora robot: sin IA y con IA <span>· simulación de limpieza en casa</span></h1>
+  <p>Tres estrategias con reglas fijas y sensores de choque, y un robot con IA que mapea y planifica. Compara trayectoria, superficie barrida, consumo, costo y limpieza repetida, en varias casas y escenarios.</p>
+  <p class="guide"><b>Cómo usarla:</b> 1) pulsa <b>Ejecutar hasta terminar</b> para ver el resultado final de los cuatro robots · 2) cambia la <b>casa</b> y activa escenarios (muebles movidos, alfombras, mascota…) · 3) abajo, <b>Estadística</b> repite todo con muchas semillas para no depender de una sola corrida.</p>
+  <button id="theme" type="button" aria-label="Cambiar entre modo claro y oscuro">Modo claro</button>
 </header>
 
 <main>
@@ -36,13 +37,35 @@
         </div>
       </div>
       <div class="group">
-        <h3>Escenario y vista</h3>
+        <h3>Casa y vista</h3>
         <div class="row">
-          <label class="chk"><input type="checkbox" id="moved"> Muebles movidos <small>(el plano guardado queda desactualizado)</small></label>
+          <label>Casa
+            <select id="house">
+              <option value="dos" selected>Dos habitaciones (6 + 4 m)</option>
+              <option value="tres">Tres habitaciones (3.4 + 3.2 + 3.2 m)</option>
+              <option value="abierto">Estudio abierto (10.2 m)</option>
+            </select>
+          </label>
           <div class="seg" id="view" role="group" aria-label="Vista del mapa">
             <button data-v="four" aria-pressed="true">Los cuatro</button>
             <button data-v="one" aria-pressed="false">Un robot</button>
           </div>
+        </div>
+      </div>
+      <div class="group">
+        <h3>Escenarios</h3>
+        <div class="row">
+          <label class="chk"><input type="checkbox" id="moved"> Muebles movidos <small>(el plano guardado queda desactualizado)</small></label>
+          <label class="chk"><input type="checkbox" id="carpet"> Alfombras <small>(gastan más energía)</small></label>
+          <label class="chk"><input type="checkbox" id="pet"> Mascota <small>(obstáculo que se mueve)</small></label>
+          <label class="chk"><input type="checkbox" id="recharge"> Recarga a mitad de limpieza <small>(si la batería no alcanza)</small></label>
+          <label>Láser de la IA
+            <select id="noise">
+              <option value="0" selected>Ideal</option>
+              <option value="0.01">Ruido bajo</option>
+              <option value="0.04">Ruido alto</option>
+            </select>
+          </label>
         </div>
       </div>
       <details class="group">
@@ -57,6 +80,26 @@
           </label>
           <label class="chk"><input type="checkbox" id="iva" checked> IVA 16 %</label>
         </div>
+      </details>
+      <details class="group wide">
+        <summary>Supuestos del robot (editables)</summary>
+        <div class="row">
+          <label>Perfil
+            <select id="preset"></select>
+          </label>
+        </div>
+        <div class="assump">
+          <label>Batería (Wh) <input type="number" id="s_battery" min="1" step="1"></label>
+          <label>Base (W) <input type="number" id="s_base" min="0" step="0.1"></label>
+          <label>Cepillo y succión (W) <input type="number" id="s_brush" min="0" step="0.1"></label>
+          <label>Tracción (W) <input type="number" id="s_drive" min="0" step="0.1"></label>
+          <label>Giro en sitio (W) <input type="number" id="s_turn" min="0" step="0.1"></label>
+          <label>Sensor y procesador de la IA (W) <input type="number" id="s_ai" min="0" step="0.1"></label>
+          <label>Extra en alfombra (W) <input type="number" id="s_carpet" min="0" step="0.1"></label>
+          <label>Eficiencia del cargador (%) <input type="number" id="s_charger" min="30" max="100" step="1"></label>
+          <label>Tiempo de carga (min) <input type="number" id="s_chargeMin" min="1" step="1"></label>
+        </div>
+        <p class="hint">Cambiar un supuesto reinicia la simulación. El perfil «Roborock S7» usa datos de listados comerciales (5200 mAh, 14,4 V, 180 min de autonomía, 360 min de carga); el reparto de potencias entre cepillo, tracción y sensor es una estimación mía.</p>
       </details>
     </div>
     <div class="tabs" id="tabs" role="tablist" aria-label="Robot seleccionado"></div>
@@ -104,6 +147,21 @@
     </div>
   </section>
 
+  <section class="panel stats">
+    <h2>Estadística con varias semillas</h2>
+    <p class="note">Una sola corrida depende del azar. Aquí cada robot se repite con muchas semillas (cada una cambia los giros al azar y el paseo de la mascota) y se muestra el promedio ± la desviación estándar. El cálculo corre en un Worker, así que la página no se congela. El zigzag y la IA son deterministas: con una casa fija dan casi lo mismo con cualquier semilla (desviación cercana a 0); la dispersión aparece en los robots que dependen del azar, y en la IA con mascota o con el láser con ruido.</p>
+    <div class="row">
+      <label>Semillas
+        <select id="nseeds"><option value="10">10</option><option value="20" selected>20</option><option value="50">50</option></select>
+      </label>
+      <button id="statsHere">Esta casa y escenario</button>
+      <button id="statsAll">Todas las casas (con y sin muebles movidos)</button>
+      <button id="statsStop" hidden>Cancelar</button>
+    </div>
+    <div class="progress" id="sprog" hidden><div id="sprogbar"></div><span id="sprogtxt"></span></div>
+    <div class="tablewrap"><table id="stats"></table></div>
+  </section>
+
   <section class="panel notes">
     <h2>Cómo leer los números</h2>
     <ul>
@@ -115,17 +173,19 @@
       <li><b>Eficiencia energética</b>: energía mínima teórica para el área limpiada entre la energía real.</li>
       <li><b>Efectividad</b>: cobertura × eficiencia energética. Mide a la vez cuánto del objetivo se logró (eficacia) y qué tan bien se aprovechó la energía (eficiencia): 100 % sería limpiar todo sin desperdiciar nada.</li>
       <li><b>Energía sin área nueva</b>: parte de la batería gastada en pasos que no limpiaron nada nuevo (repetir, girar, cruzar zonas ya limpias).</li>
-      <li><b>Modelo</b>: casa de 6 × 4 m y 4 × 4 m con puerta de 80 cm; robot de ~30 cm a 0,3 m/s; batería de 30 Wh; consumo 18 W en marcha (3 base + 10 cepillo/succión + 5 tracción) y 16 W al girar en sitio. Los valores son plausibles pero ilustrativos, no de un modelo comercial concreto.</li>
-      <li><b>Costo en pesos</b>: energía de la batería ÷ 0.85 (pérdidas del cargador) × precio por kWh de la Tarifa 1 doméstica de CFE × IVA 16 %. Precios por kWh sin IVA, tomados de la página oficial de la Tarifa 1 de CFE (app.cfe.mx) para noviembre de 2026: básico 1.144 (primeros 75 kWh), intermedio 1.389 (siguientes 65 kWh) y excedente 4.067 (cada kWh adicional). Por defecto se aplica el bloque intermedio, como precio de cada kWh adicional en un hogar de consumo medio. CFE actualiza las cuotas cada mes y el IVA de 16 % es el que suele aparecer en el recibo: confírmalos en tu recibo y cambia el bloque en la lista. «Costo al mes» supone una limpieza diaria.</li>
-      <li><b>Muebles movidos</b>: cambia la distribución real de la casa. El robot planificado sigue usando su plano viejo: si choca, rodea el obstáculo pegado a la pared hasta que vuelve a tener paso hacia su siguiente punto y, si en 15 s no lo logra, salta al siguiente punto. No rehace el plan ni aprende dónde quedó cada mueble. Los robots aleatorios y el robot con IA no dependen de un plano y se adaptan solos.</li>
+      <li><b>Modelo</b>: robot de ~30 cm a 0,3 m/s; casas de hasta 10,2 × 4,0 m con puertas de 80 cm. Los supuestos de potencia y batería son editables; los del perfil por defecto son ilustrativos (batería de 30 Wh, 18 W en marcha) y no de un modelo comercial concreto.</li>
+      <li><b>Costo en pesos</b>: energía de la batería ÷ eficiencia del cargador × precio por kWh de la Tarifa 1 doméstica de CFE × IVA 16 %. Precios por kWh sin IVA, tomados de la página oficial de la Tarifa 1 de CFE (app.cfe.mx) para noviembre de 2026: básico 1.144 (primeros 75 kWh), intermedio 1.389 (siguientes 65 kWh) y excedente 4.067 (cada kWh adicional). Por defecto se aplica el bloque intermedio, como precio de cada kWh adicional en un hogar de consumo medio. CFE actualiza las cuotas cada mes y el IVA de 16 % es el que suele aparecer en el recibo: confírmalos en tu recibo y cambia el bloque en la lista. «Costo al mes» supone una limpieza diaria.</li>
+      <li><b>Muebles movidos</b>: cambia la distribución real de la casa. El robot planificado sigue usando su plano viejo: si choca, rodea el obstáculo pegado a la pared hasta que vuelve a tener paso hacia su siguiente punto y, si no lo logra tras dos intentos, salta al siguiente punto. No rehace el plan ni aprende dónde quedó cada mueble.</li>
+      <li><b>Alfombras</b>: sobre ellas el robot gasta una potencia extra (editable). <b>Mascota</b>: un obstáculo de ~50 cm que camina por la casa con la misma trayectoria para todos los robots; los que no la ven chocan y la rodean, y la IA la ve con el láser y la anota en su mapa. <b>Recarga</b>: cuando la batería no alcanza para seguir y volver, el robot regresa a la base (trayecto estimado como 1,3 veces la línea recta), se carga el tiempo indicado en los supuestos y retoma desde donde quedó; el tiempo de carga aparece aparte.</li>
+      <li><b>Láser con ruido</b> (solo afecta al robot con IA): con cierta probabilidad por rayo, el sensor da un eco falso (obstáculo fantasma) o atraviesa los primeros 30 cm de un obstáculo, y el odómetro deriva un poco de rumbo. La IA se equivoca en su mapa, choca, lo corrige y sigue.</li>
       <li><b>Sin IA</b>: los tres primeros no aprenden ni se adaptan. Son máquinas de estados con azar, y el planificado sigue un plan fijo calculado con el plano ya conocido (BFS clásico).</li>
-      <li><b>Con IA</b>: el robot no conoce el plano. Un láser simulado (alcance 3 m, sin ruido) construye un mapa mientras limpia, y un planificador elige en cada momento la zona sucia más cercana, explorando cuando no queda nada a la vista. Gasta 3 W extra por sensor y procesador. Es IA de robótica clásica (percepción, mapa y planificación), no una red neuronal entrenada. Estas estrategias terminan solas al completar el mapa; las aleatorias paran al 95 %.</li>
+      <li><b>Con IA</b>: el robot no conoce el plano. Un láser simulado (alcance 3 m) construye un mapa mientras limpia, y un planificador elige en cada momento la zona sucia más cercana, explorando cuando no queda nada a la vista. Gasta energía extra por sensor y procesador. Es IA de robótica clásica (percepción, mapa y planificación), no una red neuronal entrenada. Estas estrategias terminan solas al completar el mapa; las aleatorias paran al 95 %.</li>
     </ul>
   </section>
 </main>
 
-<script src="sim.js?v=4"></script>
-<script src="ai.js?v=4"></script>
-<script src="app.js?v=4"></script>
+<script src="sim.js?v=5"></script>
+<script src="ai.js?v=5"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>

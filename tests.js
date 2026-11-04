@@ -6,7 +6,7 @@
   'use strict';
   const isNode = typeof module !== 'undefined' && module.exports && typeof document === 'undefined';
   if (isNode) { root.RoombaSim = require('./sim.js'); require('./ai.js'); }
-  const { Sim, buildEnv, BATTERY_WH } = root.RoombaSim;
+  const { Sim, buildEnv, CFG } = root.RoombaSim;
   const SEED = 7, MAX_STEPS = 70000;
 
   // Resultados de referencia con la semilla 7 (cobertura, energía en Wh, distancia en m)
@@ -73,7 +73,7 @@
       if (m.gross + 1e-9 < m.area) throw new Error('total pasado menor que lo barrido');
       let sum = 0; for (let c = 0; c < s.visits.length; c++) sum += s.visits[c];
       if (sum !== s.totalVisits) throw new Error('suma de visitas ' + sum + ' ≠ ' + s.totalVisits);
-      if (m.energy > BATTERY_WH + 0.01) throw new Error('energía ' + m.energy + ' Wh supera la batería');
+      if (m.energy > CFG.battery + 0.01) throw new Error('energía ' + m.energy + ' Wh supera la batería');
     }));
   });
 
@@ -110,6 +110,87 @@
   });
   test('Muebles movidos: el zigzag choca y rodea obstáculos (bumps > 0)', () => {
     if (run('planned', 'moved').m.bumps <= 0) throw new Error('no hubo choques');
+  });
+
+  /* ---------- más casas y escenarios ---------- */
+  const HOUSES = Object.keys(root.RoombaSim.HOUSES);
+  const xc = {};
+  function runX(algo, house, moved, opts, seed) {
+    const key = [algo, house, moved, JSON.stringify(opts || {}), seed || SEED].join('|');
+    if (!xc[key]) {
+      const e = buildEnv(moved, house), s = new Sim(algo, seed || SEED, e, opts);
+      const cap = opts && opts.recharge ? 200000 : MAX_STEPS;
+      while (!s.done && s.stepN < cap) s.step();
+      xc[key] = { s, m: s.metrics(), e };
+    }
+    return xc[key];
+  }
+  const withCfg = (patch, fn) => {            // aplica supuestos distintos y los restaura siempre
+    const old = Object.assign({}, CFG);
+    try { Object.assign(CFG, patch); return fn(); } finally { for (const k in CFG) if (!(k in old)) delete CFG[k]; Object.assign(CFG, old); }
+  };
+
+  sep('Otras casas');
+  HOUSES.forEach(h => [false, true].forEach(mv => test('Casa «' + root.RoombaSim.HOUSES[h].name + '»' + (mv ? ' con muebles movidos' : '') + ': todas las habitaciones alcanzables y los cuatro robots terminan', () => {
+    const e = buildEnv(mv, h);
+    root.RoombaSim.HOUSES[h].rooms.forEach(r => {
+      let n = 0; for (let c = 0; c < e.reach.length; c++) if (e.reach[c] && c % 102 >= r.x0 && c % 102 < r.x1) n++;
+      if (!n) throw new Error('la habitación ' + r.n + ' no es alcanzable');
+    });
+    ALGOS.forEach(a => {
+      const { s, m } = runX(a, h, mv);
+      if (!s.done) throw new Error(NAME[a] + ' no terminó');
+      if (!near(m.area + m.pending, m.areaReach, 1e-6)) throw new Error(NAME[a] + ': barrida + pendiente ≠ a barrer');
+    });
+    const ai = runX('ai', h, mv).m;
+    if (ai.coverage < 0.97) throw new Error('el robot con IA barrió solo ' + ai.coverage);
+  })));
+
+  sep('Escenarios: alfombra, mascota, ruido del láser y recarga');
+  test('Alfombra: gasta más energía sin cambiar lo barrido', () => {
+    ['random', 'planned', 'ai'].forEach(a => {
+      const base = runX(a, 'dos', false).m, car = runX(a, 'dos', false, { carpet: true }).m;
+      if (!(car.energy > base.energy) || !(car.carpetWh > 0)) throw new Error(NAME[a] + ': sin sobrecosto de alfombra');
+      if (Math.abs(car.coverage - base.coverage) > 1e-9) throw new Error(NAME[a] + ': la alfombra cambió la cobertura');
+    });
+  });
+  test('Mascota: la IA sigue barriendo al menos 98 % en todas las casas', () => {
+    HOUSES.forEach(h => { const m = runX('ai', h, false, { pet: true }).m; if (m.coverage < 0.98) throw new Error(h + ': ' + m.coverage); });
+  });
+  test('Mascota: todos los robots terminan y la trayectoria de la mascota es igual para todos', () => {
+    ALGOS.forEach(a => { if (!runX(a, 'dos', false, { pet: true }).s.done) throw new Error(NAME[a] + ' no terminó'); });
+    const p1 = new Sim('random', 5, env('orig'), { pet: true }), p2 = new Sim('ai', 5, env('orig'), { pet: true });
+    for (let i = 0; i < 300; i++) { p1.step(); p2.step(); }
+    if (p1.pet.x !== p2.pet.x || p1.pet.y !== p2.pet.y) throw new Error('la mascota se mueve distinto para cada robot');
+  });
+  test('Ruido del láser: la IA choca más y gasta más, pero sigue barriendo al menos 95 %', () => {
+    const c0 = runX('ai', 'dos', false).m, hi = runX('ai', 'dos', false, { noise: 0.04 }).m;
+    if (hi.coverage < 0.95) throw new Error('cobertura ' + hi.coverage);
+    if (!(hi.bumps > c0.bumps) || !(hi.energy > c0.energy)) throw new Error('el ruido no empeoró nada: choques ' + hi.bumps + ', energía ' + hi.energy);
+  });
+  test('Recarga: con batería chica el robot se recarga, el tiempo total incluye la carga y la energía crece', () => {
+    withCfg({ battery: 3 }, () => {
+      const base = runX('random', 'dos', false).m;                         // sin recarga: se detiene al agotar
+      const r = new Sim('random', SEED, env('orig'), { recharge: true });
+      while (!r.done && r.stepN < 200000) r.step();
+      const m = r.metrics();
+      if (m.recharges < 1) throw new Error('no se recargó nunca');
+      if (!(m.timeTotal > m.time + m.chargeMin * 60 - 1)) throw new Error('el tiempo total no suma la carga');
+      if (m.coverage < 0.95) throw new Error('cobertura ' + m.coverage);
+      if (base.reason !== 'Batería agotada' && base.recharges !== 0) throw new Error('el modo sin recarga recargó');
+    });
+  });
+  test('Recarga: con la batería de 30 Wh la IA y el zigzag no necesitan recargarse', () => {
+    ['ai', 'planned'].forEach(a => { const m = runX(a, 'dos', false, { recharge: true }).m; if (m.recharges !== 0) throw new Error(NAME[a] + ' se recargó ' + m.recharges); });
+  });
+  test('Supuestos: el perfil de referencia (Roborock S7) cambia batería y energía, y los supuestos se restauran', () => {
+    const before = JSON.stringify(CFG);
+    withCfg(root.RoombaSim.PRESETS.s7, () => {
+      if (CFG.battery !== 68) throw new Error('batería ' + CFG.battery);
+      const e = new Sim('ai', SEED, env('orig')); while (!e.done && e.stepN < MAX_STEPS) e.step();
+      if (!(e.energy > run('ai', 'orig').m.energy)) throw new Error('la energía no subió con más potencia');
+    });
+    if (JSON.stringify(CFG) !== before) throw new Error('los supuestos no se restauraron');
   });
 
   function runAll() {
